@@ -1,0 +1,159 @@
+/**
+ * Alchemer Reviews Admin Styles
+ */
+
+/* Toggle Switch Styles */
+.alchemer-toggle-container {
+    display: flex;
+    align-items: center;
+}
+
+.alchemer-toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    margin-right: 8px;
+}
+
+.alchemer-toggle-switch input { 
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.alchemer-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 22px;
+}
+
+.alchemer-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .alchemer-toggle-slider {
+    background-color: #2271b1;
+}
+
+input:focus + .alchemer-toggle-slider {
+    box-shadow: 0 0 1px #2271b1;
+}
+
+input:checked + .alchemer-toggle-slider:before {
+    transform: translateX(18px);
+}
+
+/* Import Section Styles */
+.alchemer-import-container {
+    margin: 20px 0;
+    padding: 30px;
+    background: #f9f9f9;
+    border-radius: 5px;
+    text-align: center;
+    border: 1px solid #e5e5e5;
+}
+
+.alchemer-import-result {
+    margin-top: 20px;
+    padding: 15px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.5;
+    transition: all 0.3s ease;
+}
+
+.alchemer-import-result.success {
+    background-color: #f0f9f0;
+    border-left: 4px solid #46b450;
+    color: #2a662f;
+}
+
+.alchemer-import-result.error {
+    background-color: #fef7f7;
+    border-left: 4px solid #d63638;
+    color: #8a2424;
+}
+
+/* Import Stats Card */
+.alchemer-import-stats {
+    margin-top: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.alchemer-stat-card {
+    flex: 1 0 120px;
+    background: white;
+    border-radius: 4px;
+    padding: 15px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.alchemer-stat-number {
+    font-size: 32px;
+    font-weight: 600;
+    margin: 10px 0;
+    line-height: 1;
+}
+
+.alchemer-stat-label {
+    color: #646970;
+    font-size: 13px;
+    text-transform: uppercase;
+}
+
+.alchemer-stat-card.created .alchemer-stat-number {
+    color: #2271b1;
+}
+
+.alchemer-stat-card.updated .alchemer-stat-number {
+    color: #3c8a3f;
+}
+
+.alchemer-stat-card.skipped .alchemer-stat-number {
+    color: #d94f4f;
+}
+
+/* Import processing animation */
+.alchemer-import-processing {
+    padding: 15px;
+    border-radius: 4px;
+    background-color: #f0f6fc;
+    border-left: 4px solid #2271b1;
+    display: flex;
+    align-items: center;
+}
+
+.alchemer-import-processing .spinner {
+    margin-right: 10px;
+    visibility: visible;
+}
+
+/* Nav tabs styling */
+.nav-tab-wrapper {
+    margin-bottom: 20px;
+}
+
+/* Survey question reference table */
+.survey-questions-reference {
+    margin-top: 30px;
+    max-height: 400px;
+    overflow-y: auto;
+} 

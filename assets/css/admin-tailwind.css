@@ -1,0 +1,174 @@
+/**
+ * Alchemer Reviews Tailwind Admin Styles
+ * This file contains custom styling for admin pages that works alongside Tailwind
+ */
+
+/* Prevent WordPress admin styling conflicts */
+.wrap h1 {
+    @apply text-2xl font-bold mb-6;
+}
+
+/* Custom transitions */
+.alchemer-card {
+    @apply transition duration-200 ease-in-out;
+}
+
+.alchemer-card:hover {
+    @apply transform -translate-y-1 shadow-lg;
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Loading spinner */
+.spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Code block styling */
+.code-block {
+    @apply bg-gray-100 rounded p-4 font-mono text-sm overflow-x-auto mt-2;
+    line-height: 1.5;
+}
+
+/* Dashboard card styling */
+.dashboard-card {
+    @apply bg-white rounded-lg shadow p-6 mb-4 border border-gray-200;
+}
+
+/* Tab styling */
+.tab-nav {
+    @apply flex border-b border-gray-200 mb-6;
+}
+
+.tab-link {
+    @apply px-4 py-2 font-medium border-b-2 border-transparent hover:text-blue-600 hover:border-blue-600;
+}
+
+.tab-link.active {
+    @apply text-blue-600 border-blue-600;
+}
+
+/* Form field styling */
+.form-input-container {
+    @apply mb-4;
+}
+
+.form-input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+}
+
+.form-label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+.form-help-text {
+    @apply mt-1 text-sm text-gray-500;
+}
+
+/* Stats card styling */
+.stats-card {
+    @apply bg-white rounded-lg shadow p-4 text-center;
+}
+
+.stats-card-value {
+    @apply text-3xl font-bold;
+}
+
+.stats-card-label {
+    @apply text-sm text-gray-500 uppercase;
+}
+
+.stats-card-created {
+    @apply border-t-4 border-green-500;
+}
+
+.stats-card-updated {
+    @apply border-t-4 border-blue-500;
+}
+
+.stats-card-skipped {
+    @apply border-t-4 border-red-500;
+}
+
+/* Alert styling */
+.alert {
+    @apply p-4 rounded mb-4;
+}
+
+.alert-warning {
+    @apply bg-yellow-50 text-yellow-800 border-l-4 border-yellow-400;
+}
+
+.alert-info {
+    @apply bg-blue-50 text-blue-800 border-l-4 border-blue-400;
+}
+
+.alert-success {
+    @apply bg-green-50 text-green-800 border-l-4 border-green-400;
+}
+
+.alert-error {
+    @apply bg-red-50 text-red-800 border-l-4 border-red-400;
+}
+
+/* Button styling */
+.alchemer-button {
+    @apply px-4 py-2 font-medium rounded focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors;
+}
+
+.alchemer-button-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+}
+
+.alchemer-button-secondary {
+    @apply bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-500;
+}
+
+.alchemer-button-lg {
+    @apply px-6 py-3 text-lg;
+}
+
+/* Table styling */
+.alchemer-table {
+    @apply min-w-full divide-y divide-gray-200;
+}
+
+.alchemer-table thead {
+    @apply bg-gray-50;
+}
+
+.alchemer-table th {
+    @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+}
+
+.alchemer-table tbody {
+    @apply bg-white divide-y divide-gray-200;
+}
+
+.alchemer-table td {
+    @apply px-6 py-4 whitespace-nowrap text-sm text-gray-500;
+}
+
+/* Prevent other styles from leaking in */
+.alchemer-admin-area * {
+    box-sizing: border-box;
+} 
