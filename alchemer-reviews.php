@@ -8,6 +8,18 @@
  * Domain Path: /languages
  */
 
+// Load Composer autoload and .env for environment variables
+if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
+    require_once __DIR__ . '/vendor/autoload.php';
+    /**
+     * Load environment variables from .env file using vlucas/phpdotenv
+     *
+     * @since 1.0.0
+     */
+    $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+    $dotenv->safeLoad();
+}
+
 // If this file is called directly, abort.
 if ( ! defined( 'WPINC' ) ) {
     die;

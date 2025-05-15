@@ -37,6 +37,7 @@ class Alchemer_Reviews_Settings {
         
         // Register AJAX handlers for testing API connection
         add_action( 'wp_ajax_test_alchemer_api_connection', array( $this, 'ajax_test_api_connection' ) );
+        add_action( 'wp_ajax_test_gemini_api_connection', array( $this, 'ajax_test_gemini_api_connection' ) );
         
         // Enqueue admin scripts and styles
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_scripts' ) );
@@ -252,7 +253,7 @@ class Alchemer_Reviews_Settings {
     }
 
     /**
-     * Render the settings page
+     * Render the settings page with tabbed API testing (Alchemer & Gemini)
      *
      * @return void
      */
@@ -264,90 +265,76 @@ class Alchemer_Reviews_Settings {
         <div class="wrap">
             <div class="alchemer-admin-area w-full p-6">
                 <h1 class="text-2xl font-bold mb-6"><?php echo esc_html( get_admin_page_title() ); ?></h1>
-                
-                <div class="dashboard-card w-full fade-in">
-                    <h2 class="text-xl font-medium text-gray-800 mb-4">
-                        <?php _e('Alchemer API Settings', 'alchemer-reviews'); ?>
-                    </h2>
-                    <p class="text-gray-600 mb-6">
-                        <?php _e('Enter your Alchemer API credentials to connect to your surveys.', 'alchemer-reviews'); ?>
-                    </p>
-                    
-                    <form action="options.php" method="post" class="w-full">
-                        <?php settings_fields( $this->option_group ); ?>
-                        
-                        <div class="form-input-container w-full">
-                            <label for="api_token" class="form-label"><?php _e('API Token', 'alchemer-reviews'); ?></label>
-                            <input type="text" id="api_token" name="<?php echo esc_attr($this->option_name); ?>[api_token]" 
-                                   value="<?php echo esc_attr(isset($this->get_settings()['api_token']) ? $this->get_settings()['api_token'] : ''); ?>" 
-                                   class="form-input">
-                            <div class="form-help-text">
-                                <?php _e('Enter your Alchemer API Token (e.g., 3577a1b61ad7ef19043038e6c3ae21d085dbc0d72a33c0b2ca). Do not include any spaces.', 'alchemer-reviews'); ?>
-                            </div>
-                        </div>
-                        
-                        <div class="form-input-container w-full">
-                            <label for="api_token_secret" class="form-label"><?php _e('API Token Secret', 'alchemer-reviews'); ?></label>
-                            <input type="text" id="api_token_secret" name="<?php echo esc_attr($this->option_name); ?>[api_token_secret]" 
-                                   value="<?php echo esc_attr(isset($this->get_settings()['api_token_secret']) ? $this->get_settings()['api_token_secret'] : ''); ?>" 
-                                   class="form-input">
-                            <div class="form-help-text">
-                                <?php _e('Enter your Alchemer API Token Secret (e.g., A9J%2FCA2zvJRcQ). Make sure to copy it exactly as shown in your Alchemer account, including any URL-encoded characters like %2F.', 'alchemer-reviews'); ?>
-                            </div>
-                            <div class="form-help-text text-red-600 font-medium mt-1">
-                                <?php _e('Important: Do not modify special characters like %2F in the token. These are part of the API key and must be preserved exactly as shown in your Alchemer account.', 'alchemer-reviews'); ?>
-                            </div>
-                        </div>
-                        
-                        <div class="form-input-container w-full">
-                            <label for="survey_id" class="form-label"><?php _e('Survey ID', 'alchemer-reviews'); ?></label>
-                            <input type="text" id="survey_id" name="<?php echo esc_attr($this->option_name); ?>[survey_id]" 
-                                   value="<?php echo esc_attr(isset($this->get_settings()['survey_id']) ? $this->get_settings()['survey_id'] : ''); ?>" 
-                                   class="form-input">
-                            <div class="form-help-text">
-                                <?php _e('Enter the Alchemer Survey ID to pull reviews from.', 'alchemer-reviews'); ?>
-                            </div>
-                        </div>
-                        
-                        <div class="mt-6">
-                            <button type="submit" class="alchemer-button alchemer-button-primary">
-                                <?php _e('Save Settings', 'alchemer-reviews'); ?>
-                            </button>
-                        </div>
-                    </form>
+                <div class="alchemer-tabs mb-6 flex space-x-2" role="tablist">
+                    <button class="alchemer-tab-button px-4 py-2 rounded-t-lg border-b-2 font-medium focus:outline-none transition-colors active border-blue-600 bg-white text-blue-700 shadow" data-tab="alchemer-tab" role="tab" aria-selected="true" aria-controls="alchemer-tab" id="tab-alchemer"><?php _e('Alchemer', 'alchemer-reviews'); ?></button>
+                    <button class="alchemer-tab-button px-4 py-2 rounded-t-lg border-b-2 font-medium focus:outline-none transition-colors border-transparent bg-gray-100 text-gray-600" data-tab="gemini-tab" role="tab" aria-selected="false" aria-controls="gemini-tab" id="tab-gemini"><?php _e('Gemini', 'alchemer-reviews'); ?></button>
                 </div>
-                
-                <div class="dashboard-card w-full mt-6 fade-in">
-                    <h2 class="text-xl font-medium text-gray-800 mb-4">
-                        <?php _e('Test API Connection', 'alchemer-reviews'); ?>
-                    </h2>
-                    <p class="text-gray-600 mb-4">
-                        <?php _e('Verify your API credentials by testing the connection to Alchemer.', 'alchemer-reviews'); ?>
-                    </p>
-                    
-                    <div class="bg-gray-50 p-4 rounded-lg mb-4">
-                        <div class="flex items-center">
-                            <button type="button" id="test-alchemer-connection" class="alchemer-button alchemer-button-secondary">
-                                <span class="dashicons dashicons-database-view mr-1"></span>
-                                <?php _e('Test API Connection', 'alchemer-reviews'); ?>
-                            </button>
-                            <div class="spinner ml-3 hidden" id="connection-spinner"></div>
-                        </div>
-                        <div id="test-connection-result" class="mt-3"></div>
+                <div class="alchemer-tab-content alchemer-tab-active" id="alchemer-tab">
+                    <!-- Alchemer API Settings and Test Button (existing content) -->
+                    <div class="dashboard-card w-full fade-in">
+                        <h2 class="text-xl font-medium text-gray-800 mb-4"><?php _e('Alchemer API Settings', 'alchemer-reviews'); ?></h2>
+                        <p class="text-gray-600 mb-6"><?php _e('Enter your Alchemer API credentials to connect to your surveys.', 'alchemer-reviews'); ?></p>
+                        <form action="options.php" method="post" class="w-full">
+                            <?php settings_fields( $this->option_group ); ?>
+                            <div class="form-input-container w-full">
+                                <label for="api_token" class="form-label"><?php _e('API Token', 'alchemer-reviews'); ?></label>
+                                <input type="text" id="api_token" name="<?php echo esc_attr($this->option_name); ?>[api_token]" value="<?php echo esc_attr(isset($this->get_settings()['api_token']) ? $this->get_settings()['api_token'] : ''); ?>" class="form-input">
+                                <div class="form-help-text"><?php _e('Enter your Alchemer API Token (e.g., 3577a1b61ad7ef19043038e6c3ae21d085dbc0d72a33c0b2ca). Do not include any spaces.', 'alchemer-reviews'); ?></div>
+                            </div>
+                            <div class="form-input-container w-full">
+                                <label for="api_token_secret" class="form-label"><?php _e('API Token Secret', 'alchemer-reviews'); ?></label>
+                                <input type="text" id="api_token_secret" name="<?php echo esc_attr($this->option_name); ?>[api_token_secret]" value="<?php echo esc_attr(isset($this->get_settings()['api_token_secret']) ? $this->get_settings()['api_token_secret'] : ''); ?>" class="form-input">
+                                <div class="form-help-text"><?php _e('Enter your Alchemer API Token Secret (e.g., A9J%2FCA2zvJRcQ). Make sure to copy it exactly as shown in your Alchemer account, including any URL-encoded characters like %2F.', 'alchemer-reviews'); ?></div>
+                                <div class="form-help-text text-red-600 font-medium mt-1"><?php _e('Important: Do not modify special characters like %2F in the token. These are part of the API key and must be preserved exactly as shown in your Alchemer account.', 'alchemer-reviews'); ?></div>
+                            </div>
+                            <div class="form-input-container w-full">
+                                <label for="survey_id" class="form-label"><?php _e('Survey ID', 'alchemer-reviews'); ?></label>
+                                <input type="text" id="survey_id" name="<?php echo esc_attr($this->option_name); ?>[survey_id]" value="<?php echo esc_attr(isset($this->get_settings()['survey_id']) ? $this->get_settings()['survey_id'] : ''); ?>" class="form-input">
+                                <div class="form-help-text"><?php _e('Enter the Alchemer Survey ID to pull reviews from.', 'alchemer-reviews'); ?></div>
+                            </div>
+                            <div class="mt-6">
+                                <button type="submit" class="alchemer-button alchemer-button-primary"><?php _e('Save Settings', 'alchemer-reviews'); ?></button>
+                            </div>
+                        </form>
                     </div>
-                    
-                    <div class="text-sm text-gray-500">
-                        <?php _e('Sample API call format:', 'alchemer-reviews'); ?>
-                        <code class="bg-gray-100 px-2 py-1 rounded text-sm block mt-1 overflow-x-auto whitespace-nowrap">
-                            https://api.alchemer.com/v5/survey/YOUR_SURVEY_ID/surveyresponse?api_token=YOUR_TOKEN&api_token_secret=YOUR_SECRET
-                        </code>
+                    <div class="dashboard-card w-full mt-6 fade-in">
+                        <h2 class="text-xl font-medium text-gray-800 mb-4"><?php _e('Test API Connection', 'alchemer-reviews'); ?></h2>
+                        <p class="text-gray-600 mb-4"><?php _e('Verify your API credentials by testing the connection to Alchemer.', 'alchemer-reviews'); ?></p>
+                        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+                            <div class="flex items-center">
+                                <button type="button" id="test-alchemer-connection" class="alchemer-button alchemer-button-secondary">
+                                    <span class="dashicons dashicons-database-view mr-1"></span>
+                                    <?php _e('Test API Connection', 'alchemer-reviews'); ?>
+                                </button>
+                                <div class="spinner ml-3 hidden" id="connection-spinner"></div>
+                            </div>
+                            <div id="test-connection-result" class="mt-3"></div>
+                        </div>
+                        <div class="text-sm text-gray-500">
+                            <?php _e('Sample API call format:', 'alchemer-reviews'); ?>
+                            <code class="bg-gray-100 px-2 py-1 rounded text-sm block mt-1 overflow-x-auto whitespace-nowrap">
+                                https://api.alchemer.com/v5/survey/YOUR_SURVEY_ID/surveyresponse?api_token=YOUR_TOKEN&api_token_secret=YOUR_SECRET
+                            </code>
+                        </div>
                     </div>
                 </div>
-                
-                <?php
-                // Allow other components to add content after the settings form
-                do_action( 'alchemer_reviews_after_settings' );
-                ?>
+                <div class="alchemer-tab-content" id="gemini-tab" style="display:none;">
+                    <div class="dashboard-card w-full fade-in">
+                        <h2 class="text-xl font-medium text-gray-800 mb-4"><?php _e('Test Gemini API Connection', 'alchemer-reviews'); ?></h2>
+                        <p class="text-gray-600 mb-4"><?php _e('Verify the Gemini API connection. No credentials required.', 'alchemer-reviews'); ?></p>
+                        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+                            <div class="flex items-center">
+                                <button type="button" id="test-gemini-connection" class="alchemer-button alchemer-button-secondary">
+                                    <span class="dashicons dashicons-database-view mr-1"></span>
+                                    <?php _e('Test API Connection', 'alchemer-reviews'); ?>
+                                </button>
+                                <div class="spinner ml-3 hidden" id="gemini-connection-spinner"></div>
+                            </div>
+                            <div id="test-gemini-connection-result" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+                <?php do_action( 'alchemer_reviews_after_settings' ); ?>
             </div>
         </div>
         <?php
@@ -420,6 +407,52 @@ class Alchemer_Reviews_Settings {
             wp_send_json_error( array(
                 'message' => $result['message'],
             ) );
+        }
+    }
+
+    /**
+     * AJAX handler for testing Gemini API connection
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function ajax_test_gemini_api_connection() {
+        check_ajax_referer( 'test_alchemer_api_connection', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'alchemer-reviews' ) ) );
+        }
+        // Try both getenv and $_ENV for maximum compatibility
+        $api_key = getenv('GEMINI_API_KEY');
+        if (empty($api_key) && isset($_ENV['GEMINI_API_KEY'])) {
+            $api_key = $_ENV['GEMINI_API_KEY'];
+        }
+        // Debug logging (optional, remove after troubleshooting)
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('GEMINI_API_KEY from getenv: ' . getenv('GEMINI_API_KEY'));
+            error_log('GEMINI_API_KEY from _ENV: ' . (isset($_ENV['GEMINI_API_KEY']) ? $_ENV['GEMINI_API_KEY'] : 'not set'));
+        }
+        if ( empty( $api_key ) ) {
+            wp_send_json_error( array( 'message' => __( 'Gemini API key is not configured on the server.', 'alchemer-reviews' ) ) );
+        }
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . $api_key;
+        $body = json_encode([
+            'contents' => [
+                [ 'parts' => [ [ 'text' => 'ping' ] ] ]
+            ]
+        ]);
+        $response = wp_remote_post( $url, [
+            'headers' => [ 'Content-Type' => 'application/json' ],
+            'body' => $body,
+            'timeout' => 15,
+        ]);
+        if ( is_wp_error( $response ) ) {
+            wp_send_json_error( array( 'message' => $response->get_error_message() ) );
+        }
+        $code = wp_remote_retrieve_response_code( $response );
+        if ( $code === 200 ) {
+            wp_send_json_success( array( 'message' => __( 'Gemini API connection successful!', 'alchemer-reviews' ) ) );
+        } else {
+            wp_send_json_error( array( 'message' => __( 'Gemini API connection failed.', 'alchemer-reviews' ) ) );
         }
     }
 
