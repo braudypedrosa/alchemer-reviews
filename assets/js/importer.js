@@ -125,9 +125,24 @@
                         $('.progress-bar').css('width', '100%');
                         $('.status-text').text('Import complete! Loading reviews...');
                         
+                        // Add debug logging
+                        console.log('Import response:', response);
+                        
+                        // Validate reviews data
+                        if (!response.data || !response.data.reviews || !Array.isArray(response.data.reviews)) {
+                            console.error('Invalid reviews data:', response.data);
+                            $result.html('<div class="alert alert-error">Error: Invalid review data received from server.</div>');
+                            return;
+                        }
+                        
                         // Show reviews for approval after a short delay
                         setTimeout(function() {
-                            showReviewsForApproval(response.data.reviews);
+                            try {
+                                showReviewsForApproval(response.data.reviews);
+                            } catch (error) {
+                                console.error('Error showing reviews:', error);
+                                $result.html('<div class="alert alert-error">Error: Failed to display reviews. Please check the console for details.</div>');
+                            }
                         }, 500);
                     } else {
                         // Show error
@@ -158,8 +173,14 @@
             
             // Add each review
             reviews.forEach(function(review) {
+                // Validate review data structure
+                if (!review || !review.review_data) {
+                    console.error('Invalid review data:', review);
+                    return;
+                }
+
                 const reviewData = review.review_data;
-                const aiAnalysis = review.ai_analysis;
+                const aiAnalysis = reviewData.ai_analysis || { sentiment: 'Unknown', suggestion: reviewData.content };
                 const responseId = reviewData.response_id;
                 
                 html += '<div class="review-card mb-6 p-4 bg-white rounded-lg shadow" data-response-id="' + responseId + '">';
@@ -167,8 +188,8 @@
                 // Review header
                 html += '<div class="flex justify-between items-center mb-4">';
                 html += '<div class="flex items-center">';
-                html += '<span class="text-lg font-medium">' + reviewData.reviewer_name + '</span>';
-                html += '<span class="ml-2 text-sm text-gray-500">' + reviewData.rating + ' ★</span>';
+                html += '<span class="text-lg font-medium">' + (reviewData.reviewer_name || 'Anonymous') + '</span>';
+                html += '<span class="ml-2 text-sm text-gray-500">' + (reviewData.rating || '0') + ' ★</span>';
                 html += '</div>';
                 html += '<div class="sentiment-badge ' + (aiAnalysis.sentiment.toLowerCase() === 'positive' ? 'positive' : 'negative') + '">';
                 html += aiAnalysis.sentiment;
@@ -178,19 +199,20 @@
                 // Original content
                 html += '<div class="mb-4">';
                 html += '<h4 class="text-sm font-medium text-gray-700 mb-2">Original Review</h4>';
-                html += '<div class="p-3 bg-gray-50 rounded">' + reviewData.content + '</div>';
+                html += '<div class="p-3 bg-gray-50 rounded">' + (reviewData.content || 'No content available') + '</div>';
                 html += '</div>';
                 
                 // AI suggestion
                 html += '<div class="mb-4">';
                 html += '<h4 class="text-sm font-medium text-gray-700 mb-2">AI Suggestion</h4>';
-                html += '<div class="p-3 bg-blue-50 rounded">' + aiAnalysis.suggestion + '</div>';
+                html += '<div class="p-3 bg-blue-50 rounded">' + (aiAnalysis.suggestion || reviewData.content || 'No suggestion available') + '</div>';
                 html += '</div>';
                 
                 // Action buttons
                 html += '<div class="review-actions">';
                 html += '<button class="reject-review alchemer-button alchemer-button-secondary" data-response-id="' + responseId + '">Reject</button>';
                 html += '<button class="accept-review alchemer-button alchemer-button-primary" data-response-id="' + responseId + '">Accept</button>';
+                html += '<button class="accept-with-ai alchemer-button alchemer-button-primary" data-response-id="' + responseId + '">Accept with AI Suggestion</button>';
                 html += '</div>';
                 
                 html += '</div>'; // End review-card
@@ -204,21 +226,42 @@
             $('.accept-review').on('click', function() {
                 const responseId = $(this).data('response-id');
                 const review = reviews.find(r => r.review_data.response_id == responseId);
-                processReview(responseId, review, true);
+                if (review) {
+                    processReview(responseId, review, true, false);
+                } else {
+                    console.error('Review not found for response ID:', responseId);
+                    Toast.show('Error', 'Review not found', 'error');
+                }
+            });
+            
+            $('.accept-with-ai').on('click', function() {
+                const responseId = $(this).data('response-id');
+                const review = reviews.find(r => r.review_data.response_id == responseId);
+                if (review) {
+                    processReview(responseId, review, true, true);
+                } else {
+                    console.error('Review not found for response ID:', responseId);
+                    Toast.show('Error', 'Review not found', 'error');
+                }
             });
             
             $('.reject-review').on('click', function() {
                 const responseId = $(this).data('response-id');
                 const review = reviews.find(r => r.review_data.response_id == responseId);
-                processReview(responseId, review, false);
+                if (review) {
+                    processReview(responseId, review, false, false);
+                } else {
+                    console.error('Review not found for response ID:', responseId);
+                    Toast.show('Error', 'Review not found', 'error');
+                }
             });
         }
         
         // Process a single review
-        function processReview(responseId, review, accept) {
+        function processReview(responseId, review, accept, useAI = false) {
             const $reviewCard = $('.review-card[data-response-id="' + responseId + '"]');
             const $button = accept ? 
-                $reviewCard.find('.accept-review') :
+                (useAI ? $reviewCard.find('.accept-with-ai') : $reviewCard.find('.accept-review')) :
                 $reviewCard.find('.reject-review');
             
             $button.prop('disabled', true);
@@ -226,14 +269,22 @@
             
             // Prepare review data for processing
             const reviewData = {
-                success: true,
                 response_id: review.review_data.response_id,
-                reviewer_name: review.review_data.reviewer_name,
-                rating: review.review_data.rating,
-                content: review.review_data.content,
-                post_date: review.review_data.post_date,
-                ai_analysis: review.ai_analysis
+                reviewer_name: review.review_data.reviewer_name || 'Anonymous',
+                rating: review.review_data.rating || 0,
+                content: accept && useAI ? 
+                    (review.review_data.ai_analysis?.suggestion || review.review_data.content) : 
+                    review.review_data.content,
+                post_date: review.review_data.post_date || new Date().toISOString(),
+                review_date: review.review_data.review_date || new Date().toLocaleDateString(),
+                ai_analysis: {
+                    sentiment: review.review_data.ai_analysis?.sentiment || 'Unknown',
+                    suggestion: review.review_data.ai_analysis?.suggestion || review.review_data.content
+                }
             };
+            
+            // Debug log
+            console.log('Sending review data:', reviewData);
             
             $.ajax({
                 url: alchemerReviewsImporter.ajaxUrl,
@@ -242,15 +293,18 @@
                     action: 'process_alchemer_review',
                     nonce: alchemerReviewsImporter.nonce,
                     review_data: reviewData,
-                    accept: accept ? 1 : 0
+                    accept: accept ? 1 : 0,
+                    use_ai: useAI ? 1 : 0
                 },
                 success: function(response) {
                     if (response.success) {
                         // Show success toast with appropriate message and type
                         Toast.show(
-                            accept ? 'Review Accepted' : 'Review Rejected',
+                            accept ? (useAI ? 'Review Accepted with AI Suggestion' : 'Review Accepted') : 'Review Rejected',
                             accept ? 
-                                'The review has been published with the AI-suggested content.' :
+                                (useAI ? 
+                                    'The review has been published with the AI-suggested content.' :
+                                    'The review has been published with the original content.') :
                                 'The review has been saved as a draft with the original content. You can find it in the Reviews list.',
                             accept ? 'success' : 'reject'
                         );

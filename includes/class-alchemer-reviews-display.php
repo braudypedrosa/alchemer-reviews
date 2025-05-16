@@ -138,7 +138,12 @@ class Alchemer_Reviews_Display {
                 // Date
                 if ( $show_date ) {
                     echo '<div class="alchemer-review-date">';
-                    echo '<time datetime="' . esc_attr( get_the_date( 'c' ) ) . '">' . esc_html( get_the_date() ) . '</time>';
+                    $review_date = get_post_meta( get_the_ID(), '_alchemer_review_date', true );
+                    if ( ! empty( $review_date ) ) {
+                        echo '<time datetime="' . esc_attr( get_the_date( 'c' ) ) . '">' . esc_html( $review_date ) . '</time>';
+                    } else {
+                        echo '<time datetime="' . esc_attr( get_the_date( 'c' ) ) . '">' . esc_html( get_the_date() ) . '</time>';
+                    }
                     echo '</div>';
                 }
                 

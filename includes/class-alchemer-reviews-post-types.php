@@ -44,6 +44,9 @@ class Alchemer_Reviews_Post_Types {
         
         // AJAX handler to approve AI review
         add_action( 'wp_ajax_approve_ai_review', array( $this, 'ajax_approve_ai_review' ) );
+        
+        // AJAX handler to generate an AI suggestion for a review
+        add_action( 'wp_ajax_generate_ai_suggestion', array( $this, 'ajax_generate_ai_suggestion' ) );
     }
 
     /**
@@ -300,7 +303,7 @@ class Alchemer_Reviews_Post_Types {
                 $new_columns['review_content'] = __( 'Review Content', 'alchemer-reviews' );
                 $new_columns['rating'] = __( 'Rating', 'alchemer-reviews' );
                 $new_columns['skip_overwrite'] = __( 'Skip Overwrite', 'alchemer-reviews' );
-                $new_columns['pending_ai_approval'] = __( 'Pending AI Approval', 'alchemer-reviews' );
+                $new_columns['actions'] = __( 'Actions', 'alchemer-reviews' );
             }
         }
         
@@ -347,17 +350,10 @@ class Alchemer_Reviews_Post_Types {
                 echo '</div>';
                 break;
                 
-            case 'pending_ai_approval':
-                $pending = get_post_meta( $post_id, 'pending_ai_approval', true );
-                $ai_suggestion = get_post_meta( $post_id, 'ai_suggestion', true );
-                if ( $pending === '1' ) {
-                    echo '<span class="dashicons dashicons-clock" style="color:#f59e42;" title="Pending AI Approval"></span>';
-                    if ( !empty($ai_suggestion) ) {
-                        echo ' <button class="button approve-ai-review" data-post-id="' . esc_attr($post_id) . '" data-ai-suggestion="' . esc_attr($ai_suggestion) . '"><span class="dashicons dashicons-yes" style="color:green;"></span> ' . __( 'Approve', 'alchemer-reviews' ) . '</button>';
-                    }
-                } else {
-                    echo '<span class="dashicons dashicons-yes" style="color:green;" title="Approved"></span>';
-                }
+            case 'actions':
+                echo '<span class="generate-ai-suggestion" data-post-id="' . esc_attr($post_id) . '" title="Generate AI suggestion" style="cursor:pointer;display:inline-block;vertical-align:middle;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 6.2l1.4-1.4"/><path d="M17.8 11.8l1.4 1.4"/><path d="M2 15l6 6"/><path d="M8 21l-6-6"/><path d="M18 9a6 6 0 1 1-6-6"/></svg>
+                </span>';
                 break;
         }
     }
@@ -457,9 +453,36 @@ class Alchemer_Reviews_Post_Types {
             array(),
             ALCHEMER_REVIEWS_VERSION
         );
-        
         wp_enqueue_style( 'alchemer-reviews-admin' );
-        
+
+        // Enqueue Tailwind and plugin button styles for the reviews list page
+        $tailwind_url = 'https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css';
+        $admin_tailwind_url = ALCHEMER_REVIEWS_PLUGIN_URL . 'assets/css/admin-tailwind.css';
+        $admin_tailwind_override_url = ALCHEMER_REVIEWS_PLUGIN_URL . 'assets/css/admin-tailwind-override.css';
+        if ( defined('WP_DEBUG') && WP_DEBUG ) {
+            error_log('Enqueuing Tailwind: ' . $tailwind_url);
+            error_log('Enqueuing admin-tailwind: ' . $admin_tailwind_url);
+            error_log('Enqueuing admin-tailwind-override: ' . $admin_tailwind_override_url);
+        }
+        wp_enqueue_style(
+            'tailwind-alchemer',
+            $tailwind_url,
+            array(),
+            '2.2.19'
+        );
+        wp_enqueue_style(
+            'alchemer-tailwind-admin',
+            $admin_tailwind_url,
+            array('tailwind-alchemer'),
+            ALCHEMER_REVIEWS_VERSION
+        );
+        wp_enqueue_style(
+            'alchemer-tailwind-override',
+            $admin_tailwind_override_url,
+            array('tailwind-alchemer', 'alchemer-tailwind-admin'),
+            ALCHEMER_REVIEWS_VERSION . '.' . time()
+        );
+
         // Register and enqueue JavaScript
         wp_register_script(
             'alchemer-reviews-admin',
@@ -468,7 +491,6 @@ class Alchemer_Reviews_Post_Types {
             ALCHEMER_REVIEWS_VERSION,
             true
         );
-        
         wp_enqueue_script( 'alchemer-reviews-admin' );
         
         // Localize script with data for AJAX
@@ -484,6 +506,11 @@ class Alchemer_Reviews_Post_Types {
                 'nonce' => wp_create_nonce( 'test_alchemer_api_connection' ),
             )
         );
+
+        // Add inline style for .alchemer-button for debugging
+        add_action('admin_footer', function() {
+            echo '<style>.alchemer-button { background: #2563eb !important; color: #fff !important; border-radius: 0.5rem !important; border: none !important; padding: 0.5rem 1.5rem !important; font-weight: 600 !important; font-size: 1rem !important; margin: 0 0.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04); transition: background 0.2s; } .alchemer-button-primary { background: #2563eb !important; color: #fff !important; } .alchemer-button-secondary { background: #e5e7eb !important; color: #374151 !important; } .alchemer-button:hover { background: #1d4ed8 !important; }</style>';
+        });
     }
     
     /**
@@ -554,7 +581,13 @@ class Alchemer_Reviews_Post_Types {
         }
         $post_id = intval( $_POST['post_id'] );
         $nonce = sanitize_text_field( $_POST['nonce'] );
-        if ( ! wp_verify_nonce( $nonce, 'alchemer_ai_suggestion' ) ) {
+        // Debug logging for nonce and user
+        if ( defined('WP_DEBUG') && WP_DEBUG ) {
+            error_log('AJAX approve_ai_review: Nonce received: ' . $nonce);
+            error_log('AJAX approve_ai_review: Fresh nonce: ' . wp_create_nonce('test_alchemer_api_connection'));
+            error_log('AJAX approve_ai_review: Current user ID: ' . get_current_user_id());
+        }
+        if ( ! wp_verify_nonce( $nonce, 'test_alchemer_api_connection' ) ) {
             wp_send_json_error( array( 'message' => __( 'Security check failed', 'alchemer-reviews' ) ) );
         }
         if ( ! current_user_can( 'edit_post', $post_id ) ) {
@@ -575,5 +608,49 @@ class Alchemer_Reviews_Post_Types {
         }
         update_post_meta( $post_id, 'pending_ai_approval', '0' );
         wp_send_json_success( array( 'message' => __( 'Review approved and published.', 'alchemer-reviews' ) ) );
+    }
+
+    /**
+     * AJAX handler to generate an AI suggestion for a review
+     *
+     * @return void
+     */
+    public function ajax_generate_ai_suggestion() {
+        // Check permissions and nonce
+        if ( ! isset( $_POST['post_id'] ) || ! isset( $_POST['nonce'] ) ) {
+            wp_send_json_error( array( 'message' => __( 'Missing required data', 'alchemer-reviews' ) ) );
+        }
+        $post_id = intval( $_POST['post_id'] );
+        $nonce = sanitize_text_field( $_POST['nonce'] );
+        // Debug logging for nonce and user
+        if ( defined('WP_DEBUG') && WP_DEBUG ) {
+            error_log('AJAX generate_ai_suggestion: Nonce received: ' . $nonce);
+            error_log('AJAX generate_ai_suggestion: Fresh nonce: ' . wp_create_nonce('test_alchemer_api_connection'));
+            error_log('AJAX generate_ai_suggestion: Current user ID: ' . get_current_user_id());
+        }
+        if ( ! wp_verify_nonce( $nonce, 'test_alchemer_api_connection' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed', 'alchemer-reviews' ) ) );
+        }
+        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+            wp_send_json_error( array( 'message' => __( 'You do not have permission to generate an AI suggestion for this review', 'alchemer-reviews' ) ) );
+        }
+        $post = get_post( $post_id );
+        if ( ! $post || 'review' !== $post->post_type ) {
+            wp_send_json_error( array( 'message' => __( 'Invalid review', 'alchemer-reviews' ) ) );
+        }
+        $content = $post->post_content;
+        if ( empty( $content ) ) {
+            wp_send_json_error( array( 'message' => __( 'No review content found.', 'alchemer-reviews' ) ) );
+        }
+        // Load the importer class and call Gemini
+        if ( ! class_exists( 'Alchemer_Reviews_Importer' ) ) {
+            require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-importer.php';
+        }
+        $importer = new Alchemer_Reviews_Importer();
+        $ai = $importer->get_gemini_sentiment_and_suggestion( $content );
+        if ( empty( $ai['suggestion'] ) ) {
+            wp_send_json_error( array( 'message' => __( 'AI did not return a suggestion.', 'alchemer-reviews' ) ) );
+        }
+        wp_send_json_success( array( 'suggestion' => $ai['suggestion'], 'sentiment' => $ai['sentiment'] ) );
     }
 } 

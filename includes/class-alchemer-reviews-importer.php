@@ -644,6 +644,7 @@ class Alchemer_Reviews_Importer {
         // Get review data
         $review_data = isset($_POST['review_data']) ? $_POST['review_data'] : array();
         $accept = isset($_POST['accept']) ? (bool) $_POST['accept'] : false;
+        $use_ai = isset($_POST['use_ai']) ? (bool) $_POST['use_ai'] : false;
         
         if (empty($review_data)) {
             wp_send_json_error(array(
@@ -652,13 +653,15 @@ class Alchemer_Reviews_Importer {
         }
         
         // Process the review
-        $result = $this->process_review($review_data, $accept);
+        $result = $this->process_review($review_data, $accept, $use_ai);
         
         if ($result['success']) {
             wp_send_json_success(array(
                 'message' => sprintf(
                     __('Review %s successfully.', 'alchemer-reviews'),
-                    $accept ? 'accepted and published' : 'rejected and saved as draft'
+                    $accept ? 
+                        ($use_ai ? 'accepted with AI suggestion' : 'accepted with original content') : 
+                        'rejected and saved as draft'
                 ),
                 'post_id' => $result['post_id'],
                 'status' => $result['status']
@@ -741,19 +744,38 @@ class Alchemer_Reviews_Importer {
         foreach ($responses['data'] as $response) {
             // Get basic review data
             $review_data = $this->prepare_review_data($response);
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('=== Processing Review ===');
+                error_log('Review Data: ' . print_r($review_data, true));
+            }
+            
             if (!$review_data['success']) {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('Failed to prepare review data: ' . $review_data['message']);
+                }
                 $skipped_count++;
                 continue;
             }
 
             // Get AI analysis
-            $ai_analysis = $this->get_gemini_sentiment_and_suggestion($review_data['content']);
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Getting AI analysis for content: ' . substr($review_data['data']['content'], 0, 100) . '...');
+            }
+            
+            $ai_analysis = $this->get_gemini_sentiment_and_suggestion($review_data['data']['content']);
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('AI Analysis Result: ' . print_r($ai_analysis, true));
+            }
+            
+            // Merge the review data with AI analysis
+            $final_review_data = array_merge($review_data['data'], array('ai_analysis' => $ai_analysis));
             
             // Add to reviews to process
             $reviews_to_process[] = array(
                 'response' => $response,
-                'review_data' => $review_data,
-                'ai_analysis' => $ai_analysis
+                'review_data' => $final_review_data
             );
         }
 
@@ -774,16 +796,35 @@ class Alchemer_Reviews_Importer {
      * @return array Review data
      */
     private function prepare_review_data($response) {
+        // Debug logging for incoming response
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('=== Preparing Review Data ===');
+            error_log('Response ID: ' . (isset($response['id']) ? $response['id'] : 'unknown'));
+            error_log('Raw response structure: ' . print_r($response, true));
+        }
+
         // Get field mappings
         $mappings = $this->get_field_mappings();
         $rating_question_id = $mappings['rating_question'];
         $reviewer_name_field = $mappings['reviewer_name'];
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Rating Question ID: ' . $rating_question_id);
+            error_log('Reviewer Name Field: ' . $reviewer_name_field);
+        }
+        
         // Get survey data
         $survey_data = isset($response['survey_data']) ? $response['survey_data'] : $response;
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Survey Data Keys: ' . implode(', ', array_keys($survey_data)));
+        }
+        
         // Check if the rating question exists
         if (!isset($survey_data[$rating_question_id])) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Rating question not found. Available keys: ' . implode(', ', array_keys($survey_data)));
+            }
             return array(
                 'success' => false,
                 'message' => sprintf(__('Rating question (ID: %s) not found in survey response.', 'alchemer-reviews'), $rating_question_id)
@@ -793,12 +834,20 @@ class Alchemer_Reviews_Importer {
         // Get rating question data
         $rating_question = $survey_data[$rating_question_id];
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Rating Question Data: ' . print_r($rating_question, true));
+        }
+        
         // Extract rating
         $rating = 0;
         if (isset($rating_question['answer'])) {
             $rating = intval($rating_question['answer']);
         } elseif (isset($rating_question['answer_id'])) {
             $rating = intval($rating_question['answer_id']);
+        }
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Extracted Rating: ' . $rating);
         }
         
         if ($rating <= 0) {
@@ -808,59 +857,156 @@ class Alchemer_Reviews_Importer {
             );
         }
         
-        // Extract content
+        // Extract content - try multiple possible locations
         $content = '';
-        if (isset($rating_question['comments'])) {
+        
+        // First try the rating question's comments
+        if (isset($rating_question['comments']) && !empty($rating_question['comments'])) {
             $content = $rating_question['comments'];
-        } elseif (isset($rating_question['comment'])) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Found content in rating_question[comments]: ' . substr($content, 0, 100));
+            }
+        } elseif (isset($rating_question['comment']) && !empty($rating_question['comment'])) {
             $content = $rating_question['comment'];
-        } elseif (isset($response['comments'])) {
-            $content = $response['comments'];
-        } elseif (isset($response['comment'])) {
-            $content = $response['comment'];
-        }
-        
-        if (empty($content)) {
-            return array(
-                'success' => false,
-                'message' => __('No review content found', 'alchemer-reviews')
-            );
-        }
-        
-        // Get reviewer name
-        $reviewer_name = __('Anonymous', 'alchemer-reviews');
-        if (!empty($reviewer_name_field) && isset($survey_data[$reviewer_name_field])) {
-            $reviewer_name_data = $survey_data[$reviewer_name_field];
-            if (isset($reviewer_name_data['answer'])) {
-                $reviewer_name = sanitize_text_field($reviewer_name_data['answer']);
-            } elseif (is_string($reviewer_name_data)) {
-                $reviewer_name = sanitize_text_field($reviewer_name_data);
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Found content in rating_question[comment]: ' . substr($content, 0, 100));
             }
         }
         
-        // Format reviewer name
-        $reviewer_name = $this->format_name_proper_case($reviewer_name);
+        // If no content in rating question, try response level comments
+        if (empty($content)) {
+            if (isset($response['comments']) && !empty($response['comments'])) {
+                $content = $response['comments'];
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('Found content in response[comments]: ' . substr($content, 0, 100));
+                }
+            } elseif (isset($response['comment']) && !empty($response['comment'])) {
+                $content = $response['comment'];
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('Found content in response[comment]: ' . substr($content, 0, 100));
+                }
+            }
+        }
         
-        // Get submission date
-        $post_date = '';
+        // If still no content, try looking in survey_data for text fields
+        if (empty($content) && is_array($survey_data)) {
+            foreach ($survey_data as $key => $value) {
+                if (is_array($value)) {
+                    if (isset($value['comments']) && !empty($value['comments'])) {
+                        $content = $value['comments'];
+                        if (defined('WP_DEBUG') && WP_DEBUG) {
+                            error_log("Found content in survey_data[{$key}][comments]: " . substr($content, 0, 100));
+                        }
+                        break;
+                    } elseif (isset($value['comment']) && !empty($value['comment'])) {
+                        $content = $value['comment'];
+                        if (defined('WP_DEBUG') && WP_DEBUG) {
+                            error_log("Found content in survey_data[{$key}][comment]: " . substr($content, 0, 100));
+                        }
+                        break;
+                    }
+                } elseif (is_string($value) && strlen($value) > 10) {
+                    $content = $value;
+                    if (defined('WP_DEBUG') && WP_DEBUG) {
+                        error_log("Found content in survey_data[{$key}]: " . substr($content, 0, 100));
+                    }
+                    break;
+                }
+            }
+        }
+        
+        if (empty($content)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('No content found in any location');
+                error_log('Survey Data Structure: ' . print_r($survey_data, true));
+            }
+            return array(
+                'success' => false,
+                'message' => __('No review content found in any expected location', 'alchemer-reviews')
+            );
+        }
+
+        // Extract reviewer name
+        $reviewer_name = __('Anonymous', 'alchemer-reviews');
+        if (!empty($reviewer_name_field)) {
+            if (isset($survey_data[$reviewer_name_field])) {
+                $name_data = $survey_data[$reviewer_name_field];
+                if (is_array($name_data) && isset($name_data['answer'])) {
+                    $reviewer_name = $name_data['answer'];
+                } elseif (is_string($name_data)) {
+                    $reviewer_name = $name_data;
+                }
+            } elseif (isset($response[$reviewer_name_field])) {
+                $reviewer_name = $response[$reviewer_name_field];
+            }
+        }
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Extracted Reviewer Name: ' . $reviewer_name);
+        }
+
+        // Format the review date from date_submitted
+        $review_date = '';
         if (isset($response['date_submitted'])) {
-            $post_date = date('Y-m-d H:i:s', strtotime($response['date_submitted']));
-        } elseif (isset($response['datesubmitted'])) {
-            $post_date = date('Y-m-d H:i:s', strtotime($response['datesubmitted']));
-        } elseif (isset($response['submitdate'])) {
-            $post_date = date('Y-m-d H:i:s', strtotime($response['submitdate']));
+            try {
+                $date = new DateTime($response['date_submitted']);
+                $review_date = $date->format('F j, Y'); // Format as "May 4, 2025"
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('Formatted review date: ' . $review_date);
+                }
+            } catch (Exception $e) {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('Error formatting review date: ' . $e->getMessage());
+                }
+                $review_date = current_time('F j, Y');
+            }
         } else {
-            $post_date = current_time('mysql');
+            $review_date = current_time('F j, Y');
+        }
+        
+        // Prepare the review data
+        $review_data = array(
+            'response_id' => isset($response['id']) ? $response['id'] : uniqid('review_'),
+            'rating' => $rating,
+            'content' => $content,
+            'reviewer_name' => $reviewer_name,
+            'post_date' => isset($response['date_submitted']) ? $response['date_submitted'] : current_time('mysql'),
+            'review_date' => $review_date
+        );
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Final Review Data: ' . print_r($review_data, true));
+            error_log('=== End Preparing Review Data ===');
         }
         
         return array(
             'success' => true,
-            'response_id' => isset($response['id']) ? $response['id'] : '',
-            'reviewer_name' => $reviewer_name,
-            'rating' => $rating,
-            'content' => $content,
-            'post_date' => $post_date
+            'data' => $review_data
         );
+    }
+
+    /**
+     * Get a review post by its Alchemer response ID
+     *
+     * @param string $response_id The Alchemer response ID
+     * @return WP_Post|null The review post if found, null otherwise
+     */
+    private function get_review_by_response_id($response_id) {
+        $args = array(
+            'post_type' => 'review',
+            'meta_key' => '_alchemer_response_id',
+            'meta_value' => $response_id,
+            'posts_per_page' => 1,
+            'post_status' => array('publish', 'draft', 'pending')
+        );
+
+        $query = new WP_Query($args);
+        
+        if ($query->have_posts()) {
+            return $query->posts[0];
+        }
+        
+        return null;
     }
 
     /**
@@ -868,54 +1014,94 @@ class Alchemer_Reviews_Importer {
      *
      * @param array $review_data Review data including AI analysis
      * @param bool $accept Whether to accept the review
+     * @param bool $use_ai Whether to use the AI suggestion
      * @return array Result of processing
      */
-    public function process_review($review_data, $accept = false) {
-        if (!isset($review_data['success']) || !$review_data['success']) {
+    public function process_review($review_data, $accept = false, $use_ai = false) {
+        // Debug logging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('=== Processing Review ===');
+            error_log('Review Data: ' . print_r($review_data, true));
+            error_log('Accept: ' . ($accept ? 'true' : 'false'));
+            error_log('Use AI: ' . ($use_ai ? 'true' : 'false'));
+        }
+
+        // Check if review data is valid
+        if (empty($review_data) || !is_array($review_data)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Invalid review data: ' . print_r($review_data, true));
+            }
             return array(
                 'success' => false,
-                'message' => isset($review_data['message']) ? $review_data['message'] : __('Invalid review data.', 'alchemer-reviews')
+                'message' => __('Invalid review data', 'alchemer-reviews')
             );
         }
 
-        // Check for existing review by response ID
-        $existing = get_posts(array(
-            'post_type' => 'review',
-            'meta_key' => '_alchemer_response_id',
-            'meta_value' => $review_data['response_id'],
-            'posts_per_page' => 1,
-            'post_status' => array('publish', 'draft', 'pending', 'future', 'private'),
-            'fields' => 'ids',
-        ));
-        if ($existing) {
-            $post_id = $existing[0];
-            $skip_overwrite = get_post_meta($post_id, '_alchemer_manually_edited', true);
-            if ($skip_overwrite === '1') {
+        // Extract the actual review data if it's nested
+        $review_data = isset($review_data['data']) ? $review_data['data'] : $review_data;
+        
+        // Validate and sanitize required fields
+        $response_id = isset($review_data['response_id']) ? sanitize_text_field($review_data['response_id']) : '';
+        $reviewer_name = isset($review_data['reviewer_name']) ? sanitize_text_field($review_data['reviewer_name']) : __('Anonymous', 'alchemer-reviews');
+        $rating = isset($review_data['rating']) ? intval($review_data['rating']) : 0;
+        $content = isset($review_data['content']) ? wp_kses_post($review_data['content']) : '';
+        $post_date = isset($review_data['post_date']) ? sanitize_text_field($review_data['post_date']) : current_time('mysql');
+        $review_date = isset($review_data['review_date']) ? sanitize_text_field($review_data['review_date']) : current_time('F j, Y');
+        
+        // If using AI suggestion and it exists, use it as the content
+        if ($use_ai && isset($review_data['ai_analysis']['suggestion'])) {
+            $content = wp_kses_post($review_data['ai_analysis']['suggestion']);
+        }
+        
+        // Validate required fields
+        if (empty($response_id) || empty($content)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Missing required fields. Response ID: ' . $response_id . ', Content: ' . $content);
+            }
+            return array(
+                'success' => false,
+                'message' => __('Missing required fields', 'alchemer-reviews')
+            );
+        }
+        
+        // Check if review already exists
+        $existing_post = $this->get_review_by_response_id($response_id);
+        
+        if ($existing_post) {
+            $post_id = $existing_post->ID;
+            
+            // Check if review was manually edited
+            $manually_edited = get_post_meta($post_id, '_alchemer_manually_edited', true);
+            if ($manually_edited === '1') {
                 return array(
                     'success' => false,
-                    'message' => __('Skipped: Review is set to skip overwrite.', 'alchemer-reviews')
+                    'message' => __('Review was manually edited and cannot be updated', 'alchemer-reviews')
                 );
             }
-            // Update the post
+            
+            // Update post data
             $post_data = array(
                 'ID' => $post_id,
-                'post_title' => $review_data['reviewer_name'],
-                'post_content' => $accept ? $review_data['ai_analysis']['suggestion'] : $review_data['content'],
+                'post_title' => $reviewer_name,
+                'post_content' => $content,
                 'post_status' => $accept ? 'publish' : 'draft',
-                'post_date' => $review_data['post_date'],
+                'post_date' => $post_date,
             );
-            $result = wp_update_post($post_data, true);
-            if (is_wp_error($result)) {
-                return array(
-                    'success' => false,
-                    'message' => $result->get_error_message()
-                );
+            wp_update_post($post_data);
+            
+            // Update meta data
+            update_post_meta($post_id, '_alchemer_response_id', $response_id);
+            update_post_meta($post_id, '_alchemer_reviewer_name', $reviewer_name);
+            update_post_meta($post_id, '_alchemer_rating', $rating);
+            update_post_meta($post_id, '_alchemer_review_date', $review_date);
+            
+            // Only update AI analysis if it exists
+            if (isset($review_data['ai_analysis'])) {
+                $ai_analysis = $review_data['ai_analysis'];
+                update_post_meta($post_id, 'ai_sentiment', isset($ai_analysis['sentiment']) ? sanitize_text_field($ai_analysis['sentiment']) : 'Unknown');
+                update_post_meta($post_id, 'ai_suggestion', isset($ai_analysis['suggestion']) ? wp_kses_post($ai_analysis['suggestion']) : $content);
             }
-            // Update meta
-            update_post_meta($post_id, '_alchemer_reviewer_name', $review_data['reviewer_name']);
-            update_post_meta($post_id, '_alchemer_rating', $review_data['rating']);
-            update_post_meta($post_id, 'ai_sentiment', $review_data['ai_analysis']['sentiment']);
-            update_post_meta($post_id, 'ai_suggestion', $review_data['ai_analysis']['suggestion']);
+            
             update_post_meta($post_id, '_alchemer_manually_edited', '0');
             return array(
                 'success' => true,
@@ -927,25 +1113,42 @@ class Alchemer_Reviews_Importer {
 
         // Prepare post data for new review
         $post_data = array(
-            'post_title' => $review_data['reviewer_name'],
-            'post_content' => $accept ? $review_data['ai_analysis']['suggestion'] : $review_data['content'],
+            'post_title' => $reviewer_name,
+            'post_content' => $content,
             'post_status' => $accept ? 'publish' : 'draft',
             'post_type' => 'review',
-            'post_date' => $review_data['post_date'],
+            'post_date' => $post_date,
         );
+        
+        // Debug log the post data
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Inserting post with data: ' . print_r($post_data, true));
+        }
+        
         $post_id = wp_insert_post($post_data);
         if (is_wp_error($post_id)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Error inserting post: ' . $post_id->get_error_message());
+            }
             return array(
                 'success' => false,
                 'message' => $post_id->get_error_message()
             );
         }
+        
         // Save meta data
-        update_post_meta($post_id, '_alchemer_response_id', $review_data['response_id']);
-        update_post_meta($post_id, '_alchemer_reviewer_name', $review_data['reviewer_name']);
-        update_post_meta($post_id, '_alchemer_rating', $review_data['rating']);
-        update_post_meta($post_id, 'ai_sentiment', $review_data['ai_analysis']['sentiment']);
-        update_post_meta($post_id, 'ai_suggestion', $review_data['ai_analysis']['suggestion']);
+        update_post_meta($post_id, '_alchemer_response_id', $response_id);
+        update_post_meta($post_id, '_alchemer_reviewer_name', $reviewer_name);
+        update_post_meta($post_id, '_alchemer_rating', $rating);
+        update_post_meta($post_id, '_alchemer_review_date', $review_date);
+        
+        // Only save AI analysis if it exists
+        if (isset($review_data['ai_analysis'])) {
+            $ai_analysis = $review_data['ai_analysis'];
+            update_post_meta($post_id, 'ai_sentiment', isset($ai_analysis['sentiment']) ? sanitize_text_field($ai_analysis['sentiment']) : 'Unknown');
+            update_post_meta($post_id, 'ai_suggestion', isset($ai_analysis['suggestion']) ? wp_kses_post($ai_analysis['suggestion']) : $content);
+        }
+        
         update_post_meta($post_id, '_alchemer_manually_edited', '0');
         return array(
             'success' => true,
@@ -1004,7 +1207,45 @@ class Alchemer_Reviews_Importer {
      * @param string $content The review content
      * @return array [ 'sentiment' => 'Positive'|'Negative', 'suggestion' => string ]
      */
-    private function get_gemini_sentiment_and_suggestion($content) {
+    public function get_gemini_sentiment_and_suggestion($content) {
+        // Debug logging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('=== Gemini API Analysis Start ===');
+            error_log('Input content type: ' . gettype($content));
+            error_log('Input content: ' . print_r($content, true));
+        }
+
+        // Validate content
+        if (empty($content)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Empty content provided to Gemini API');
+            }
+            return array(
+                'sentiment' => 'Unknown',
+                'suggestion' => ''
+            );
+        }
+
+        // Ensure content is a string
+        if (!is_string($content)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Content is not a string, converting...');
+            }
+            $content = is_array($content) ? json_encode($content) : (string)$content;
+        }
+
+        // Clean and prepare the content
+        $clean_content = trim(strip_tags($content));
+        if (empty($clean_content)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Content is empty after cleaning');
+            }
+            return array(
+                'sentiment' => 'Unknown',
+                'suggestion' => $content
+            );
+        }
+
         $api_key = getenv('GEMINI_API_KEY');
         if (empty($api_key) && isset($_ENV['GEMINI_API_KEY'])) {
             $api_key = $_ENV['GEMINI_API_KEY'];
@@ -1013,36 +1254,62 @@ class Alchemer_Reviews_Importer {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Gemini API key not found in environment variables');
             }
-            return [ 'sentiment' => 'Unknown', 'suggestion' => '' ];
+            return array(
+                'sentiment' => 'Unknown',
+                'suggestion' => $clean_content
+            );
         }
 
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . $api_key;
-        $prompt = "Analyze the following review. First, say if the tone is Positive or Negative. Then, suggest a single improved version of the review, keeping the same context and meaning.\nReview: {$content}";
         
-        $body = json_encode([
-            'contents' => [
-                [ 'parts' => [ [ 'text' => $prompt ] ] ]
-            ]
-        ]);
+        // Updated prompt to explicitly request plain text without formatting
+        $prompt = "Analyze this customer review and provide a response in the following format. Do not use any formatting characters like asterisks or quotes in your response:
+
+Sentiment: [Positive or Negative]
+Improved Version: [Your improved version of the review that maintains the same meaning but is more professional and clear. Write in plain text without any formatting characters.]
+
+Review: {$clean_content}";
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Sending prompt to Gemini API: ' . substr($prompt, 0, 100) . '...');
+        }
+
+        $body = json_encode(array(
+            'contents' => array(
+                array('parts' => array(array('text' => $prompt)))
+            ),
+            'generationConfig' => array(
+                'temperature' => 0.7,
+                'topK' => 40,
+                'topP' => 0.95,
+                'maxOutputTokens' => 1024,
+            )
+        ));
 
         if ($body === false) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Failed to encode Gemini API request body: ' . json_last_error_msg());
             }
-            return [ 'sentiment' => 'Unknown', 'suggestion' => '' ];
+            return array(
+                'sentiment' => 'Unknown',
+                'suggestion' => $clean_content
+            );
         }
 
-        $response = wp_remote_post($url, [
-            'headers' => [ 'Content-Type' => 'application/json' ],
+        $response = wp_remote_post($url, array(
+            'headers' => array('Content-Type' => 'application/json'),
             'body' => $body,
-            'timeout' => 20,
-        ]);
+            'timeout' => 30,
+        ));
 
         if (is_wp_error($response)) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Gemini API request failed: ' . $response->get_error_message());
             }
-            return [ 'sentiment' => 'Unknown', 'suggestion' => '' ];
+            return array(
+                'sentiment' => 'Unknown',
+                'suggestion' => $clean_content
+            );
         }
 
         $response_code = wp_remote_retrieve_response_code($response);
@@ -1051,7 +1318,10 @@ class Alchemer_Reviews_Importer {
                 error_log('Gemini API returned non-200 status code: ' . $response_code);
                 error_log('Response body: ' . wp_remote_retrieve_body($response));
             }
-            return [ 'sentiment' => 'Unknown', 'suggestion' => '' ];
+            return array(
+                'sentiment' => 'Unknown',
+                'suggestion' => $clean_content
+            );
         }
 
         $body = wp_remote_retrieve_body($response);
@@ -1062,51 +1332,73 @@ class Alchemer_Reviews_Importer {
                 error_log('Failed to decode Gemini API response: ' . json_last_error_msg());
                 error_log('Raw response: ' . $body);
             }
-            return [ 'sentiment' => 'Unknown', 'suggestion' => '' ];
+            return array(
+                'sentiment' => 'Unknown',
+                'suggestion' => $clean_content
+            );
         }
 
         if (!isset($data['candidates'][0]['content']['parts'][0]['text'])) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Unexpected Gemini API response structure: ' . print_r($data, true));
             }
-            return [ 'sentiment' => 'Unknown', 'suggestion' => '' ];
+            return array(
+                'sentiment' => 'Unknown',
+                'suggestion' => $clean_content
+            );
         }
 
         $text = $data['candidates'][0]['content']['parts'][0]['text'];
         
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Raw Gemini API response text: ' . $text);
+        }
+
         // Parse sentiment and suggestion from the response
         $sentiment = 'Unknown';
-        $suggestion = '';
+        $suggestion = $clean_content; // Default to original content if parsing fails
 
-        if ($text) {
-            // Extract sentiment
-            if (preg_match('/(Positive|Negative)/i', $text, $matches)) {
-                $sentiment = ucfirst(strtolower($matches[1]));
-            }
+        // Extract sentiment
+        if (preg_match('/Sentiment:\s*(Positive|Negative)/i', $text, $matches)) {
+            $sentiment = ucfirst(strtolower($matches[1]));
+        }
 
-            // Extract suggestion
-            $lines = preg_split('/\r?\n/', $text);
-            foreach ($lines as $line) {
-                if (stripos($line, 'suggestion:') !== false) {
-                    $suggestion = trim(str_ireplace('suggestion:', '', $line));
-                    break;
-                }
+        // Extract suggestion and clean it
+        if (preg_match('/Improved Version:\s*(.+?)(?:\n|$)/s', $text, $matches)) {
+            $suggestion = trim($matches[1]);
+            // Remove any formatting characters
+            $suggestion = str_replace(array('**', '*', '"', '"', '"', "'", "'", '`'), '', $suggestion);
+            // Remove any leading/trailing quotes
+            $suggestion = trim($suggestion, '"\'');
+        } else {
+            // Fallback: try to find any substantial text after "Improved Version:"
+            $parts = explode('Improved Version:', $text);
+            if (count($parts) > 1) {
+                $suggestion = trim($parts[1]);
+                // Remove any trailing sentiment analysis
+                $suggestion = preg_replace('/\n.*$/', '', $suggestion);
+                // Remove any formatting characters
+                $suggestion = str_replace(array('**', '*', '"', '"', '"', "'", "'", '`'), '', $suggestion);
+                // Remove any leading/trailing quotes
+                $suggestion = trim($suggestion, '"\'');
             }
+        }
 
-            // If no explicit suggestion found, use the last non-empty line
-            if (empty($suggestion)) {
-                $lines = array_filter($lines, 'trim');
-                if (!empty($lines)) {
-                    $suggestion = trim(end($lines));
-                }
-            }
+        // If we still don't have a good suggestion, use the original content
+        if (empty($suggestion) || strlen($suggestion) < 10) {
+            $suggestion = $clean_content;
         }
 
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('Gemini API analysis - Sentiment: ' . $sentiment . ', Suggestion: ' . $suggestion);
+            error_log('Extracted Sentiment: ' . $sentiment);
+            error_log('Extracted Suggestion: ' . $suggestion);
+            error_log('=== Gemini API Analysis End ===');
         }
 
-        return [ 'sentiment' => $sentiment, 'suggestion' => $suggestion ];
+        return array(
+            'sentiment' => $sentiment,
+            'suggestion' => $suggestion
+        );
     }
 
     /**

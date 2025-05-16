@@ -416,7 +416,7 @@ class Alchemer_Reviews_API {
             'filter_field' => '',
             'filter_value' => '',
             'filter_condition' => '',
-            'fields' => '',
+            'fields' => 'status,is_test_data,date_submitted', // Include new fields
             'order_by' => '-date_submitted', // Order by newest responses first
         );
         
@@ -438,22 +438,27 @@ class Alchemer_Reviews_API {
             'page' => $page,
             'resultsperpage' => $resultsperpage,
             'completed' => $completed,
-            'order_by' => $order_by // Add order_by parameter to sort by newest first
+            'order_by' => $order_by,
+            'fields' => $fields
         );
         
-        // Add filter if provided
+        // Add filter for status and is_test_data
+        $params['filter[field][0]'] = 'status';
+        $params['filter[value][0]'] = 'Complete';
+        $params['filter[operator][0]'] = '=';
+        
+        $params['filter[field][1]'] = 'is_test_data';
+        $params['filter[value][1]'] = '0';
+        $params['filter[operator][1]'] = '=';
+        
+        // Add additional filter if provided
         if ( ! empty( $filter_field ) && ! empty( $filter_value ) ) {
-            $params['filter[field][0]'] = $filter_field;
-            $params['filter[value][0]'] = $filter_value;
+            $params['filter[field][2]'] = $filter_field;
+            $params['filter[value][2]'] = $filter_value;
             
             if ( ! empty( $filter_condition ) ) {
-                $params['filter[condition][0]'] = $filter_condition;
+                $params['filter[operator][2]'] = $filter_condition;
             }
-        }
-        
-        // Add fields if provided
-        if ( ! empty( $fields ) ) {
-            $params['fields'] = $fields;
         }
         
         // Build URL
