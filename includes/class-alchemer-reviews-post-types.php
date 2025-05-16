@@ -41,6 +41,9 @@ class Alchemer_Reviews_Post_Types {
         
         // AJAX handler for toggle skip overwrite
         add_action( 'wp_ajax_toggle_skip_overwrite', array( $this, 'ajax_toggle_skip_overwrite' ) );
+        
+        // AJAX handler to approve AI review
+        add_action( 'wp_ajax_approve_ai_review', array( $this, 'ajax_approve_ai_review' ) );
     }
 
     /**
@@ -110,6 +113,22 @@ class Alchemer_Reviews_Post_Types {
             'side',
             'high'
         );
+        add_meta_box(
+            'alchemer_ai_suggestion',
+            __( 'AI Suggestion', 'alchemer-reviews' ),
+            array( $this, 'render_ai_suggestion_meta_box' ),
+            'review',
+            'normal',
+            'high'
+        );
+        add_meta_box(
+            'alchemer_original_review',
+            __( 'Original Review Content', 'alchemer-reviews' ),
+            array( $this, 'render_original_review_meta_box' ),
+            'review',
+            'normal',
+            'high'
+        );
     }
 
     /**
@@ -167,6 +186,36 @@ class Alchemer_Reviews_Post_Types {
             </p>
         <?php endif; ?>
         <?php
+    }
+
+    /**
+     * Render the AI suggestion meta box
+     *
+     * @param WP_Post $post The post object.
+     * @return void
+     */
+    public function render_ai_suggestion_meta_box( $post ) {
+        wp_nonce_field( 'alchemer_ai_suggestion', 'alchemer_ai_suggestion_nonce' );
+        $ai_suggestion = get_post_meta( $post->ID, 'ai_suggestion', true );
+        $pending = get_post_meta( $post->ID, 'pending_ai_approval', true );
+        if ( $pending === '1' && !empty($ai_suggestion) ) {
+            echo '<textarea id="ai_suggestion" name="ai_suggestion" class="widefat" rows="5">' . esc_textarea($ai_suggestion) . '</textarea>';
+            echo '<p><button type="button" class="button button-primary" id="approve-ai-suggestion">' . __( 'Approve AI Suggestion', 'alchemer-reviews' ) . '</button></p>';
+        } else {
+            echo '<p>' . __( 'No AI suggestion available or already approved.', 'alchemer-reviews' ) . '</p>';
+        }
+    }
+
+    /**
+     * Render the original review content meta box
+     *
+     * @param WP_Post $post The post object.
+     * @return void
+     */
+    public function render_original_review_meta_box( $post ) {
+        wp_nonce_field( 'alchemer_original_review', 'alchemer_original_review_nonce' );
+        $original_content = $post->post_content;
+        echo '<div class="original-review-content">' . wp_kses_post( $original_content ) . '</div>';
     }
 
     /**
@@ -251,6 +300,7 @@ class Alchemer_Reviews_Post_Types {
                 $new_columns['review_content'] = __( 'Review Content', 'alchemer-reviews' );
                 $new_columns['rating'] = __( 'Rating', 'alchemer-reviews' );
                 $new_columns['skip_overwrite'] = __( 'Skip Overwrite', 'alchemer-reviews' );
+                $new_columns['pending_ai_approval'] = __( 'Pending AI Approval', 'alchemer-reviews' );
             }
         }
         
@@ -295,6 +345,19 @@ class Alchemer_Reviews_Post_Types {
                                                __('Can be overwritten during import', 'alchemer-reviews')) . 
                      '</span>';
                 echo '</div>';
+                break;
+                
+            case 'pending_ai_approval':
+                $pending = get_post_meta( $post_id, 'pending_ai_approval', true );
+                $ai_suggestion = get_post_meta( $post_id, 'ai_suggestion', true );
+                if ( $pending === '1' ) {
+                    echo '<span class="dashicons dashicons-clock" style="color:#f59e42;" title="Pending AI Approval"></span>';
+                    if ( !empty($ai_suggestion) ) {
+                        echo ' <button class="button approve-ai-review" data-post-id="' . esc_attr($post_id) . '" data-ai-suggestion="' . esc_attr($ai_suggestion) . '"><span class="dashicons dashicons-yes" style="color:green;"></span> ' . __( 'Approve', 'alchemer-reviews' ) . '</button>';
+                    }
+                } else {
+                    echo '<span class="dashicons dashicons-yes" style="color:green;" title="Approved"></span>';
+                }
                 break;
         }
     }
@@ -418,6 +481,7 @@ class Alchemer_Reviews_Post_Types {
                 'errorText' => __( 'Error: ', 'alchemer-reviews' ),
                 'protectedText' => __( 'Protected from import overwriting', 'alchemer-reviews' ),
                 'unprotectedText' => __( 'Can be overwritten during import', 'alchemer-reviews' ),
+                'nonce' => wp_create_nonce( 'test_alchemer_api_connection' ),
             )
         );
     }
@@ -477,5 +541,39 @@ class Alchemer_Reviews_Post_Types {
                 'message' => __( 'Failed to update status', 'alchemer-reviews' ),
             ) );
         }
+    }
+
+    /**
+     * AJAX handler to approve AI review: overwrite post_content with ai_suggestion, set pending_ai_approval=0, and publish the post
+     *
+     * @return void
+     */
+    public function ajax_approve_ai_review() {
+        if ( ! isset( $_POST['post_id'] ) || ! isset( $_POST['nonce'] ) ) {
+            wp_send_json_error( array( 'message' => __( 'Missing required data', 'alchemer-reviews' ) ) );
+        }
+        $post_id = intval( $_POST['post_id'] );
+        $nonce = sanitize_text_field( $_POST['nonce'] );
+        if ( ! wp_verify_nonce( $nonce, 'alchemer_ai_suggestion' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Security check failed', 'alchemer-reviews' ) ) );
+        }
+        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+            wp_send_json_error( array( 'message' => __( 'You do not have permission to approve this review', 'alchemer-reviews' ) ) );
+        }
+        $ai_suggestion = isset( $_POST['ai_suggestion'] ) ? wp_kses_post( $_POST['ai_suggestion'] ) : get_post_meta( $post_id, 'ai_suggestion', true );
+        if ( empty( $ai_suggestion ) ) {
+            wp_send_json_error( array( 'message' => __( 'No AI suggestion found for this review.', 'alchemer-reviews' ) ) );
+        }
+        // Overwrite post_content and publish
+        $update = wp_update_post( array(
+            'ID' => $post_id,
+            'post_content' => $ai_suggestion,
+            'post_status' => 'publish',
+        ), true );
+        if ( is_wp_error( $update ) ) {
+            wp_send_json_error( array( 'message' => $update->get_error_message() ) );
+        }
+        update_post_meta( $post_id, 'pending_ai_approval', '0' );
+        wp_send_json_success( array( 'message' => __( 'Review approved and published.', 'alchemer-reviews' ) ) );
     }
 } 

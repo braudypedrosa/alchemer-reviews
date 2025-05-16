@@ -144,6 +144,93 @@
                 }
             });
         });
+
+        // Approve AI Review button click handler
+        $(document).on('click', '.approve-ai-review', function(e) {
+            e.preventDefault();
+            const $btn = $(this);
+            const postId = $btn.data('post-id');
+            const aiSuggestion = $btn.data('ai-suggestion');
+            // Create modal if it doesn't exist
+            if ($('#ai-suggestion-modal').length === 0) {
+                $('body').append(`
+                    <div id="ai-suggestion-modal" class="alchemer-modal" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999;">
+                        <div class="alchemer-modal-content" style="background: white; margin: 10% auto; padding: 20px; width: 80%; max-width: 600px; border-radius: 5px;">
+                            <h3>AI Suggestion</h3>
+                            <div id="ai-suggestion-text" style="margin: 15px 0;"></div>
+                            <div style="text-align: right;">
+                                <button id="modal-cancel" class="button">Cancel</button>
+                                <button id="modal-approve" class="button button-primary">Approve</button>
+                            </div>
+                        </div>
+                    </div>
+                `);
+                $('#modal-cancel').on('click', function() {
+                    $('#ai-suggestion-modal').hide();
+                });
+            }
+            // Set AI suggestion text and show modal
+            $('#ai-suggestion-text').text(aiSuggestion);
+            $('#ai-suggestion-modal').show();
+            // Handle modal approve button
+            $('#modal-approve').off('click').on('click', function() {
+                const $modalBtn = $(this);
+                $modalBtn.prop('disabled', true).text('Approving...');
+                $.ajax({
+                    url: alchemerReviewsAdmin.ajaxUrl,
+                    type: 'POST',
+                    data: {
+                        action: 'approve_ai_review',
+                        post_id: postId,
+                        nonce: alchemerReviewsAdmin.nonce
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            $btn.closest('td').html('<span class="dashicons dashicons-yes" style="color:green;" title="Approved"></span>');
+                            $('#ai-suggestion-modal').hide();
+                        } else {
+                            alert(alchemerReviewsAdmin.errorText + response.data.message);
+                            $modalBtn.prop('disabled', false).text('Approve');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert(alchemerReviewsAdmin.errorText + error);
+                        $modalBtn.prop('disabled', false).text('Approve');
+                    }
+                });
+            });
+        });
+
+        // Approve AI Suggestion button in meta box
+        $('#approve-ai-suggestion').on('click', function() {
+            const $btn = $(this);
+            const postId = $btn.closest('.postbox').find('input[name="post_ID"]').val();
+            const aiSuggestion = $('#ai_suggestion').val();
+            const nonce = $('#alchemer_ai_suggestion_nonce').val();
+            $btn.prop('disabled', true).text('Approving...');
+            $.ajax({
+                url: alchemerReviewsAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'approve_ai_review',
+                    post_id: postId,
+                    nonce: nonce,
+                    ai_suggestion: aiSuggestion
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $btn.closest('.postbox').find('.inside').html('<p>' + response.data.message + '</p>');
+                    } else {
+                        alert(alchemerReviewsAdmin.errorText + response.data.message);
+                        $btn.prop('disabled', false).text('Approve AI Suggestion');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert(alchemerReviewsAdmin.errorText + error);
+                    $btn.prop('disabled', false).text('Approve AI Suggestion');
+                }
+            });
+        });
     });
 
 })(jQuery); 
