@@ -19,19 +19,19 @@ class Alchemer_Reviews_Post_Types {
         add_action( 'add_meta_boxes', array( $this, 'add_review_meta_boxes' ) );
         
         // Save meta box data
-        add_action( 'save_post_review', array( $this, 'save_review_meta' ) );
+        add_action( 'save_post_alchemer-review', array( $this, 'save_review_meta' ) );
         
         // Automatically set manually_edited flag when content is updated through the editor
         add_action( 'post_updated', array( $this, 'maybe_set_manually_edited_flag' ), 10, 3 );
         
         // Add columns to the reviews list
-        add_filter( 'manage_review_posts_columns', array( $this, 'add_review_columns' ) );
+        add_filter( 'manage_alchemer-review_posts_columns', array( $this, 'add_review_columns' ) );
         
         // Display column content
-        add_action( 'manage_review_posts_custom_column', array( $this, 'display_review_column_content' ), 10, 2 );
+        add_action( 'manage_alchemer-review_posts_custom_column', array( $this, 'display_review_column_content' ), 10, 2 );
         
         // Make columns sortable
-        add_filter( 'manage_edit-review_sortable_columns', array( $this, 'make_review_columns_sortable' ) );
+        add_filter( 'manage_edit-alchemer-review_sortable_columns', array( $this, 'make_review_columns_sortable' ) );
         
         // Sort by custom columns
         add_action( 'pre_get_posts', array( $this, 'sort_reviews_by_custom_column' ) );
@@ -50,7 +50,7 @@ class Alchemer_Reviews_Post_Types {
     }
 
     /**
-     * Register the 'review' custom post type
+     * Register the 'alchemer-review' custom post type
      *
      * @return void
      */
@@ -89,7 +89,7 @@ class Alchemer_Reviews_Post_Types {
             'show_ui'            => true,
             'show_in_menu'       => true,
             'query_var'          => true,
-            'rewrite'            => array( 'slug' => 'review' ),
+            'rewrite'            => array( 'slug' => 'alchemer-reviews' ),
             'capability_type'    => 'post',
             'has_archive'        => true,
             'hierarchical'       => false,
@@ -99,7 +99,7 @@ class Alchemer_Reviews_Post_Types {
             'show_in_rest'       => true,
         );
 
-        register_post_type( 'review', $args );
+        register_post_type( 'alchemer-review', $args );
     }
 
     /**
@@ -112,7 +112,7 @@ class Alchemer_Reviews_Post_Types {
             'alchemer_review_details',
             __( 'Review Details', 'alchemer-reviews' ),
             array( $this, 'render_review_details_meta_box' ),
-            'review',
+            'alchemer-review',
             'side',
             'high'
         );
@@ -120,7 +120,7 @@ class Alchemer_Reviews_Post_Types {
             'alchemer_ai_suggestion',
             __( 'AI Suggestion', 'alchemer-reviews' ),
             array( $this, 'render_ai_suggestion_meta_box' ),
-            'review',
+            'alchemer-review',
             'normal',
             'high'
         );
@@ -128,7 +128,7 @@ class Alchemer_Reviews_Post_Types {
             'alchemer_original_review',
             __( 'Original Review Content', 'alchemer-reviews' ),
             array( $this, 'render_original_review_meta_box' ),
-            'review',
+            'alchemer-review',
             'normal',
             'high'
         );
@@ -272,8 +272,8 @@ class Alchemer_Reviews_Post_Types {
      * @return void
      */
     public function maybe_set_manually_edited_flag( $post_id, $post_after, $post_before ) {
-        // Check if the post type is 'review'
-        if ( $post_after->post_type !== 'review' ) {
+        // Check if the post type is 'alchemer-review'
+        if ( $post_after->post_type !== 'alchemer-review' ) {
             return;
         }
         
@@ -379,7 +379,7 @@ class Alchemer_Reviews_Post_Types {
      * @return void
      */
     public function sort_reviews_by_custom_column( $query ) {
-        if ( ! is_admin() || ! $query->is_main_query() || $query->get( 'post_type' ) !== 'review' ) {
+        if ( ! is_admin() || ! $query->is_main_query() || $query->get( 'post_type' ) !== 'alchemer-review' ) {
             return;
         }
         
@@ -442,7 +442,7 @@ class Alchemer_Reviews_Post_Types {
      */
     public function enqueue_admin_scripts( $hook ) {
         // Only load on the reviews list page
-        if ( 'edit.php' !== $hook || 'review' !== get_current_screen()->post_type ) {
+        if ( 'edit.php' !== $hook || 'alchemer-review' !== get_current_screen()->post_type ) {
             return;
         }
         
@@ -482,7 +482,7 @@ class Alchemer_Reviews_Post_Types {
             array('tailwind-alchemer', 'alchemer-tailwind-admin'),
             ALCHEMER_REVIEWS_VERSION . '.' . time()
         );
-
+        
         // Register and enqueue JavaScript
         wp_register_script(
             'alchemer-reviews-admin',
@@ -510,6 +510,11 @@ class Alchemer_Reviews_Post_Types {
         // Add inline style for .alchemer-button for debugging
         add_action('admin_footer', function() {
             echo '<style>.alchemer-button { background: #2563eb !important; color: #fff !important; border-radius: 0.5rem !important; border: none !important; padding: 0.5rem 1.5rem !important; font-weight: 600 !important; font-size: 1rem !important; margin: 0 0.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04); transition: background 0.2s; } .alchemer-button-primary { background: #2563eb !important; color: #fff !important; } .alchemer-button-secondary { background: #e5e7eb !important; color: #374151 !important; } .alchemer-button:hover { background: #1d4ed8 !important; }</style>';
+        });
+
+        // Add admin-only scroll fix for .fixed and .wp-list-table
+        add_action('admin_head', function() {
+            echo '<style>.fixed, .wp-list-table { position: static !important; overflow: visible !important; max-height: none !important; }</style>';
         });
     }
     
@@ -547,7 +552,7 @@ class Alchemer_Reviews_Post_Types {
         
         // Get the post to verify it exists and is a review
         $post = get_post( $post_id );
-        if ( ! $post || 'review' !== $post->post_type ) {
+        if ( ! $post || 'alchemer-review' !== $post->post_type ) {
             wp_send_json_error( array(
                 'message' => __( 'Invalid review', 'alchemer-reviews' ),
             ) );
@@ -635,7 +640,7 @@ class Alchemer_Reviews_Post_Types {
             wp_send_json_error( array( 'message' => __( 'You do not have permission to generate an AI suggestion for this review', 'alchemer-reviews' ) ) );
         }
         $post = get_post( $post_id );
-        if ( ! $post || 'review' !== $post->post_type ) {
+        if ( ! $post || 'alchemer-review' !== $post->post_type ) {
             wp_send_json_error( array( 'message' => __( 'Invalid review', 'alchemer-reviews' ) ) );
         }
         $content = $post->post_content;

@@ -138,7 +138,7 @@
                         // Show reviews for approval after a short delay
                         setTimeout(function() {
                             try {
-                                showReviewsForApproval(response.data.reviews);
+                            showReviewsForApproval(response.data.reviews);
                             } catch (error) {
                                 console.error('Error showing reviews:', error);
                                 $result.html('<div class="alert alert-error">Error: Failed to display reviews. Please check the console for details.</div>');
@@ -303,7 +303,7 @@
                             accept ? (useAI ? 'Review Accepted with AI Suggestion' : 'Review Accepted') : 'Review Rejected',
                             accept ? 
                                 (useAI ? 
-                                    'The review has been published with the AI-suggested content.' :
+                                'The review has been published with the AI-suggested content.' :
                                     'The review has been published with the original content.') :
                                 'The review has been saved as a draft with the original content. You can find it in the Reviews list.',
                             accept ? 'success' : 'reject'

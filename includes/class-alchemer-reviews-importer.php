@@ -79,7 +79,7 @@ class Alchemer_Reviews_Importer {
      */
     public function enqueue_admin_bootstrap($hook) {
         // Only load on our plugin pages
-        if (!in_array($hook, array('review_page_alchemer_reviews_field_mapping', 'review_page_alchemer_reviews_settings'))) {
+        if (!in_array($hook, array('alchemer-review_page_alchemer_reviews_field_mapping', 'alchemer-review_page_alchemer_reviews_settings'))) {
             return;
         }
         
@@ -112,7 +112,7 @@ class Alchemer_Reviews_Importer {
      */
     public function enqueue_admin_styles($hook) {
         // Only load on our plugin pages
-        if (!in_array($hook, array('review_page_alchemer_reviews_field_mapping', 'review_page_alchemer_reviews_settings'))) {
+        if (!in_array($hook, array('alchemer-review_page_alchemer_reviews_field_mapping', 'alchemer-review_page_alchemer_reviews_settings'))) {
             return;
         }
         
@@ -158,7 +158,7 @@ class Alchemer_Reviews_Importer {
      */
     public function add_field_mapping_page() {
         add_submenu_page(
-            'edit.php?post_type=review',
+            'edit.php?post_type=alchemer-review',
             __('Tools', 'alchemer-reviews'),
             __('Tools', 'alchemer-reviews'),
             'manage_options',
@@ -367,12 +367,12 @@ class Alchemer_Reviews_Importer {
                 ?>
                 
                 <div class="tab-nav mb-8">
-                    <a href="<?php echo admin_url('edit.php?post_type=review&page=alchemer_reviews_field_mapping&tab=field_mapping'); ?>" 
+                    <a href="<?php echo admin_url('edit.php?post_type=alchemer-review&page=alchemer_reviews_field_mapping&tab=field_mapping'); ?>" 
                        class="tab-link <?php echo $current_tab === 'field_mapping' ? 'active' : ''; ?>">
                         <span class="dashicons dashicons-editor-table mr-1"></span>
                         <?php _e('Field Mapping', 'alchemer-reviews'); ?>
                     </a>
-                    <a href="<?php echo admin_url('edit.php?post_type=review&page=alchemer_reviews_field_mapping&tab=import_reviews'); ?>" 
+                    <a href="<?php echo admin_url('edit.php?post_type=alchemer-review&page=alchemer_reviews_field_mapping&tab=import_reviews'); ?>" 
                        class="tab-link <?php echo $current_tab === 'import_reviews' ? 'active' : ''; ?>">
                         <span class="dashicons dashicons-download mr-1"></span>
                         <?php _e('Import Reviews', 'alchemer-reviews'); ?>
@@ -414,7 +414,7 @@ class Alchemer_Reviews_Importer {
                         ?>
                         <div class="alert alert-warning">
                             <p class="mb-3"><?php _e('Please configure your field mappings before importing reviews.', 'alchemer-reviews'); ?></p>
-                            <a href="<?php echo admin_url('edit.php?post_type=review&page=alchemer_reviews_field_mapping&tab=field_mapping'); ?>" 
+                            <a href="<?php echo admin_url('edit.php?post_type=alchemer-review&page=alchemer_reviews_field_mapping&tab=field_mapping'); ?>" 
                                class="alchemer-button alchemer-button-primary">
                                 <span class="dashicons dashicons-editor-table mr-1"></span>
                                 <?php _e('Configure Field Mappings', 'alchemer-reviews'); ?>
@@ -572,7 +572,7 @@ class Alchemer_Reviews_Importer {
             </p>
             
             <div class="flex items-center mt-4">
-                <a href="<?php echo admin_url('edit.php?post_type=review&page=alchemer_reviews_field_mapping&tab=import_reviews'); ?>" 
+                <a href="<?php echo admin_url('edit.php?post_type=alchemer-review&page=alchemer_reviews_field_mapping&tab=import_reviews'); ?>" 
                    class="alchemer-button alchemer-button-primary">
                     <span class="dashicons dashicons-download mr-1"></span>
                     <?php _e('Go to Import Reviews', 'alchemer-reviews'); ?>
@@ -876,12 +876,12 @@ class Alchemer_Reviews_Importer {
         // If no content in rating question, try response level comments
         if (empty($content)) {
             if (isset($response['comments']) && !empty($response['comments'])) {
-                $content = $response['comments'];
+            $content = $response['comments'];
                 if (defined('WP_DEBUG') && WP_DEBUG) {
                     error_log('Found content in response[comments]: ' . substr($content, 0, 100));
                 }
             } elseif (isset($response['comment']) && !empty($response['comment'])) {
-                $content = $response['comment'];
+            $content = $response['comment'];
                 if (defined('WP_DEBUG') && WP_DEBUG) {
                     error_log('Found content in response[comment]: ' . substr($content, 0, 100));
                 }
@@ -925,7 +925,7 @@ class Alchemer_Reviews_Importer {
                 'message' => __('No review content found in any expected location', 'alchemer-reviews')
             );
         }
-
+        
         // Extract reviewer name
         $reviewer_name = __('Anonymous', 'alchemer-reviews');
         if (!empty($reviewer_name_field)) {
@@ -993,7 +993,7 @@ class Alchemer_Reviews_Importer {
      */
     private function get_review_by_response_id($response_id) {
         $args = array(
-            'post_type' => 'review',
+            'post_type' => 'alchemer-review',
             'meta_key' => '_alchemer_response_id',
             'meta_value' => $response_id,
             'posts_per_page' => 1,
@@ -1058,8 +1058,8 @@ class Alchemer_Reviews_Importer {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Missing required fields. Response ID: ' . $response_id . ', Content: ' . $content);
             }
-            return array(
-                'success' => false,
+                return array(
+                    'success' => false,
                 'message' => __('Missing required fields', 'alchemer-reviews')
             );
         }
@@ -1116,7 +1116,7 @@ class Alchemer_Reviews_Importer {
             'post_title' => $reviewer_name,
             'post_content' => $content,
             'post_status' => $accept ? 'publish' : 'draft',
-            'post_type' => 'review',
+            'post_type' => 'alchemer-review',
             'post_date' => $post_date,
         );
         
@@ -1353,15 +1353,15 @@ Review: {$clean_content}";
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('Raw Gemini API response text: ' . $text);
         }
-
+        
         // Parse sentiment and suggestion from the response
         $sentiment = 'Unknown';
         $suggestion = $clean_content; // Default to original content if parsing fails
 
-        // Extract sentiment
+            // Extract sentiment
         if (preg_match('/Sentiment:\s*(Positive|Negative)/i', $text, $matches)) {
-            $sentiment = ucfirst(strtolower($matches[1]));
-        }
+                $sentiment = ucfirst(strtolower($matches[1]));
+            }
 
         // Extract suggestion and clean it
         if (preg_match('/Improved Version:\s*(.+?)(?:\n|$)/s', $text, $matches)) {

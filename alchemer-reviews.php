@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Alchemer Reviews
- * Description: A plugin to manage and display reviews.
+ * Description: A plugin to import and manage Alchemer survey responses as reviews in WordPress.
  * Version: 1.0.0
  * Author: Your Name
  * Text Domain: alchemer-reviews
@@ -42,8 +42,11 @@ require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-api.
 // Include the file that handles importing reviews
 require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-importer.php';
 
-// Include the file that handles displaying reviews
-require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-display.php';
+// Include dependencies
+require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/reviews-carouel/alchemer-review-carousel.php';
+
+// Register admin menu
+require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/reviews-carouel/alchemer-review-carousel-docs.php';
 
 // Hook to initialize the plugin
 add_action( 'plugins_loaded', 'alchemer_reviews_init' );
@@ -65,10 +68,6 @@ function alchemer_reviews_init() {
     // Initialize importer
     $importer = new Alchemer_Reviews_Importer();
     $importer->init();
-    
-    // Initialize display
-    $display = new Alchemer_Reviews_Display();
-    $display->init();
 }
 
 // Register activation hook

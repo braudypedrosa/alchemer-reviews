@@ -1,10 +1,10 @@
 # Alchemer Reviews
 
-A WordPress plugin to fetch Alchemer survey responses and display them as reviews on your site.
+A WordPress plugin to fetch Alchemer survey responses and manage them as reviews in your WordPress dashboard.
 
 ## Description
 
-Alchemer Reviews creates a bridge between your Alchemer (formerly SurveyGizmo) surveys and WordPress. The plugin fetches survey responses and presents them as testimonials or reviews on your website. It's perfect for businesses looking to showcase customer feedback collected through Alchemer surveys.
+Alchemer Reviews creates a bridge between your Alchemer (formerly SurveyGizmo) surveys and WordPress. The plugin fetches survey responses and stores them as review posts in WordPress. It's perfect for businesses looking to collect and manage customer feedback from Alchemer surveys.
 
 ## Features
 
@@ -16,9 +16,6 @@ Alchemer Reviews creates a bridge between your Alchemer (formerly SurveyGizmo) s
 - Uses reviewer name as the review title for better identification
 - Automatically skips responses with no rating or empty comments
 - Protection for manually edited reviews to prevent overwriting during imports
-- Customizable display options via shortcode
-- Filter reviews by rating
-- Multiple layout options (grid, list)
 - Custom meta boxes for rating information
 - Admin columns with review content and rating for easy management
 
@@ -80,46 +77,12 @@ The plugin includes a system to protect reviews that have been manually edited f
 
 This feature is particularly useful when you want to fix typos, improve formatting, or update content in reviews while still regularly importing new survey responses.
 
-## Displaying Reviews
-
-Use the `[alchemer_reviews]` shortcode to display reviews on your site. The shortcode accepts several parameters to customize the display:
-
-```
-[alchemer_reviews count="5" orderby="date" order="DESC" layout="grid" rating="0" show_pagination="yes" show_rating="yes" show_date="yes"]
-```
-
-### Shortcode Parameters
-
-| Parameter | Description | Options | Default |
-|-----------|-------------|---------|---------|
-| count | Number of reviews to display | Any number | 5 |
-| orderby | How to sort the reviews | date, title, rating, rand | date |
-| order | Sort order | ASC, DESC | DESC |
-| layout | Layout style | grid, list | grid |
-| rating | Minimum rating filter | 0-5 | 0 (all ratings) |
-| show_pagination | Whether to show pagination | yes, no | yes |
-| show_rating | Whether to show ratings | yes, no | yes |
-| show_date | Whether to show review date | yes, no | yes |
-
-## Example Usage
-
-Display 3 reviews in a list layout, sorted by rating:
-```
-[alchemer_reviews count="3" orderby="rating" layout="list"]
-```
-
-Display only reviews with a rating of 4 or higher:
-```
-[alchemer_reviews rating="4"]
-```
-
 ## Troubleshooting
 
 - **API Connection Issues**: Ensure your API Token and API Token Secret are entered exactly as shown in your Alchemer account, including any special characters.
 - **No Reviews Importing**: Check your field mappings to ensure they correspond to the correct question IDs in your survey.
 - **Missing Reviews**: Remember that reviews without ratings or empty comments are skipped during import.
 - **Protected Reviews**: Reviews marked as "Manually Edited" won't be updated during imports. If you want a review to be updated, uncheck the "Manually edited" option in the review edit screen.
-- **Display Issues**: If reviews aren't displaying correctly, try switching to a different layout or check if your theme's CSS might be conflicting with the plugin's styles.
 
 ## Credits
 

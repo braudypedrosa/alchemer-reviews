@@ -51,7 +51,7 @@ class Alchemer_Reviews_Settings {
      */
     public function add_settings_page() {
         add_submenu_page(
-            'edit.php?post_type=review',
+            'edit.php?post_type=alchemer-review',
             __( 'Alchemer Settings', 'alchemer-reviews' ),
             __( 'Settings', 'alchemer-reviews' ),
             'manage_options',
@@ -152,7 +152,7 @@ class Alchemer_Reviews_Settings {
     public function display_admin_notices() {
         // Check if we're on the settings page
         $screen = get_current_screen();
-        if ( $screen->id !== 'review_page_alchemer_reviews_settings' ) {
+        if ( $screen->id !== 'alchemer-review_page_alchemer_reviews_settings' ) {
             return;
         }
         
@@ -347,7 +347,8 @@ class Alchemer_Reviews_Settings {
      * @return void
      */
     public function enqueue_admin_scripts( $hook ) {
-        if ( 'review_page_alchemer_reviews_settings' !== $hook ) {
+        // Only enqueue script on plugin settings page
+        if ( $hook !== 'alchemer-review_page_alchemer_reviews_settings' ) {
             return;
         }
         
@@ -472,8 +473,8 @@ class Alchemer_Reviews_Settings {
      * @return void
      */
     public function enqueue_admin_styles($hook) {
-        // Only load on our plugin pages
-        if ($hook !== 'review_page_alchemer_reviews_settings') {
+        // Only load Tailwind on the plugin settings page
+        if ( $hook !== 'alchemer-review_page_alchemer_reviews_settings' ) {
             return;
         }
         
