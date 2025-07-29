@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Alchemer Reviews
  * Description: A plugin to import and manage Alchemer survey responses as reviews in WordPress.
- * Version: 1.0.0
- * Author: Your Name
+ * Version: 1.0.2
+ * Author: Braudy Pedrosa
  * Text Domain: alchemer-reviews
  * Domain Path: /languages
  */
@@ -14,7 +14,7 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
     /**
      * Load environment variables from .env file using vlucas/phpdotenv
      *
-     * @since 1.0.0
+     * @since 1.0.1
      */
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
     $dotenv->safeLoad();
@@ -26,7 +26,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 // Define plugin constants
-define( 'ALCHEMER_REVIEWS_VERSION', '1.0.0' );
+define( 'ALCHEMER_REVIEWS_VERSION', '1.0.1' );
 define( 'ALCHEMER_REVIEWS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ALCHEMER_REVIEWS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -43,10 +43,10 @@ require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-api.
 require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-importer.php';
 
 // Include dependencies
-require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/reviews-carouel/alchemer-review-carousel.php';
+require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/reviews-carousel/alchemer-review-carousel.php';
 
 // Register admin menu
-require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/reviews-carouel/alchemer-review-carousel-docs.php';
+require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/reviews-carousel/alchemer-review-carousel-docs.php';
 
 // Hook to initialize the plugin
 add_action( 'plugins_loaded', 'alchemer_reviews_init' );

@@ -210,6 +210,7 @@
                 
                 // Action buttons
                 html += '<div class="review-actions">';
+                html += '<button class="edit-review alchemer-button alchemer-button-secondary" data-response-id="' + responseId + '">Edit</button>';
                 html += '<button class="reject-review alchemer-button alchemer-button-secondary" data-response-id="' + responseId + '">Reject</button>';
                 html += '<button class="accept-review alchemer-button alchemer-button-primary" data-response-id="' + responseId + '">Accept</button>';
                 html += '<button class="accept-with-ai alchemer-button alchemer-button-primary" data-response-id="' + responseId + '">Accept with AI Suggestion</button>';
@@ -221,6 +222,39 @@
             html += '</div>'; // End reviews-to-approve
             
             $result.html(html);
+            
+            // Create edit modal if it doesn't exist
+            if ($('#edit-review-modal').length === 0) {
+                const modalHtml = `
+                    <div id="edit-review-modal" class="alchemer-modal">
+                        <div class="alchemer-modal-content">
+                            <div class="modal-header">
+                                <h3 class="text-xl font-medium mb-4">Edit Review</h3>
+                            </div>
+                            <div class="modal-body">
+                                <textarea id="edit-review-content" class="w-full h-40 p-3 border rounded mb-4"></textarea>
+                            </div>
+                            <div class="modal-footer flex justify-end gap-2">
+                                <button id="cancel-edit" class="alchemer-button alchemer-button-secondary">Cancel</button>
+                                <button id="save-edit" class="alchemer-button alchemer-button-primary">Save & Accept</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                $('body').append(modalHtml);
+
+                // Add modal event handlers
+                $('#cancel-edit').on('click', function() {
+                    hideModal();
+                });
+
+                // Close modal when clicking outside
+                $('#edit-review-modal').on('click', function(e) {
+                    if (e.target === this) {
+                        hideModal();
+                    }
+                });
+            }
             
             // Add event handlers for accept/reject buttons
             $('.accept-review').on('click', function() {
@@ -255,6 +289,47 @@
                     Toast.show('Error', 'Review not found', 'error');
                 }
             });
+
+            $('.edit-review').on('click', function() {
+                const responseId = $(this).data('response-id');
+                const review = reviews.find(r => r.review_data.response_id == responseId);
+                if (review) {
+                    // Show modal with current content
+                    showModal(review.review_data.content);
+                    
+                    // Update save button handler
+                    $('#save-edit').off('click').on('click', function() {
+                        const editedContent = $('#edit-review-content').val();
+                        if (editedContent.trim()) {
+                            // Update review content
+                            review.review_data.content = editedContent;
+                            // Process with edited content
+                            processReview(responseId, review, true, false);
+                            // Hide modal
+                            hideModal();
+                        } else {
+                            Toast.show('Error', 'Review content cannot be empty', 'error');
+                        }
+                    });
+                } else {
+                    console.error('Review not found for response ID:', responseId);
+                    Toast.show('Error', 'Review not found', 'error');
+                }
+            });
+
+            // Helper functions for modal
+            function showModal(content) {
+                $('#edit-review-content').val(content);
+                $('#edit-review-modal').addClass('show');
+                // Prevent scrolling on the body
+                $('body').css('overflow', 'hidden');
+            }
+
+            function hideModal() {
+                $('#edit-review-modal').removeClass('show');
+                // Restore scrolling on the body
+                $('body').css('overflow', '');
+            }
         }
         
         // Process a single review

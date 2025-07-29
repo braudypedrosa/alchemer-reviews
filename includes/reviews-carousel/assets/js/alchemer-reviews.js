@@ -1,53 +1,10 @@
 ;(($) => {
   $(document).ready(() => {
-    // Grid Layout Navigation
-    initGridNavigation()
-
     // Initialize all testimonial sliders on the page
     $(".alchemer-testimonial-slider").each(function () {
       initTestimonialSlider($(this))
     })
   })
-
-  function initGridNavigation() {
-    var $gridItems = $(".alchemer-grid-item")
-    var itemsPerPage = 3
-    var currentPage = 0
-    var totalItems = $gridItems.length
-    var totalPages = Math.ceil(totalItems / itemsPerPage)
-
-    // Don't initialize if there aren't enough items
-    if (totalItems <= itemsPerPage) {
-      return
-    }
-
-    function showGridPage(page) {
-      $gridItems.hide()
-
-      var startIndex = page * itemsPerPage
-      var endIndex = Math.min(startIndex + itemsPerPage, totalItems)
-
-      for (var i = startIndex; i < endIndex; i++) {
-        $gridItems.eq(i).show()
-      }
-    }
-
-    // Initialize grid
-    showGridPage(0)
-
-    // Bind click events
-    $(".alchemer-grid-prev").on("click", (e) => {
-      e.preventDefault()
-      currentPage = (currentPage - 1 + totalPages) % totalPages
-      showGridPage(currentPage)
-    })
-
-    $(".alchemer-grid-next").on("click", (e) => {
-      e.preventDefault()
-      currentPage = (currentPage + 1) % totalPages
-      showGridPage(currentPage)
-    })
-  }
 
   function initTestimonialSlider($slider) {
     // Get slider ID and settings
@@ -126,9 +83,6 @@
 
     // Function to go to a specific slide with true infinite loop
     function goToSlide(index, animate = true) {
-      // For true infinite loop, we don't limit the index
-      // Instead, we'll handle the wrapping after the animation
-
       // Calculate the position
       var slideWidth = 100 / slidesToShow
       var position = -(index * slideWidth)

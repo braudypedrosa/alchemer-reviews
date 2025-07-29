@@ -84,59 +84,101 @@
   color: #333;
 }
 
-/* Grid Layout Styles */
-.alchemer-reviews-grid .alchemer-grid-container {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+/* Grid Layout */
+.alchemer-reviews-grid {
+    padding: 2rem 0;
 }
 
-.alchemer-reviews-grid .alchemer-grid-item {
-  border: 1px solid #f0f0f0;
-  border-radius: 8px;
-  padding: 20px;
-  background-color: #fff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-direction: column;
+.alchemer-reviews-title {
+    font-size: 2rem;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 2rem;
+    color: #333;
 }
 
-.alchemer-reviews-grid .alchemer-reviewer-info {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  margin-bottom: 15px;
+.alchemer-grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 2rem;
+    padding: 1rem;
 }
 
-.alchemer-reviews-grid .alchemer-reviewer-name {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 5px;
+.alchemer-grid-item {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
-.alchemer-reviews-grid .alchemer-review-date {
-  font-size: 14px;
-  color: #666;
+.alchemer-grid-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
-.alchemer-reviews-grid .alchemer-review-rating {
-  margin-bottom: 15px;
-  text-align: center;
+.alchemer-reviewer-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
 }
 
-.alchemer-reviews-grid .alchemer-review-content {
-  font-size: 14px;
-  line-height: 1.5;
-  color: #333;
-  flex-grow: 1;
+.alchemer-reviewer-meta {
+    flex: 1;
 }
 
-.alchemer-reviews-grid .alchemer-grid-navigation {
-  display: flex;
-  justify-content: center;
-  margin-top: 20px;
-  gap: 10px;
+.alchemer-reviewer-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0;
+}
+
+.alchemer-review-date {
+    font-size: 0.9rem;
+    color: #718096;
+    margin-top: 0.25rem;
+}
+
+.alchemer-review-rating {
+    color: #f6ad55;
+    font-size: 1.2rem;
+    display: flex;
+    gap: 0.25rem;
+}
+
+.alchemer-review-content {
+    color: #4a5568;
+    line-height: 1.6;
+    font-size: 1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .alchemer-grid-container {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 1.5rem;
+        padding: 1rem 0.5rem;
+    }
+
+    .alchemer-reviews-title {
+        font-size: 1.75rem;
+        margin-bottom: 1.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .alchemer-grid-container {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .alchemer-grid-item {
+        padding: 1.25rem;
+    }
 }
 
 /* Testimonial Layout Styles */
