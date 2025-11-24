@@ -35,9 +35,8 @@ class Alchemer_Reviews_Settings {
         // Add admin notices for settings updates
         add_action( 'admin_notices', array( $this, 'display_admin_notices' ) );
         
-        // Register AJAX handlers for testing API connection
+        // Register AJAX handler for testing API connection
         add_action( 'wp_ajax_test_alchemer_api_connection', array( $this, 'ajax_test_api_connection' ) );
-        add_action( 'wp_ajax_test_gemini_api_connection', array( $this, 'ajax_test_gemini_api_connection' ) );
         
         // Enqueue admin scripts and styles
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_scripts' ) );
@@ -265,10 +264,7 @@ class Alchemer_Reviews_Settings {
         <div class="wrap">
             <div class="alchemer-admin-area w-full p-6">
                 <h1 class="text-2xl font-bold mb-6"><?php echo esc_html( get_admin_page_title() ); ?></h1>
-                <div class="alchemer-tabs mb-6 flex space-x-2" role="tablist">
-                    <button class="alchemer-tab-button px-4 py-2 rounded-t-lg border-b-2 font-medium focus:outline-none transition-colors active border-blue-600 bg-white text-blue-700 shadow" data-tab="alchemer-tab" role="tab" aria-selected="true" aria-controls="alchemer-tab" id="tab-alchemer"><?php _e('Alchemer', 'alchemer-reviews'); ?></button>
-                    <button class="alchemer-tab-button px-4 py-2 rounded-t-lg border-b-2 font-medium focus:outline-none transition-colors border-transparent bg-gray-100 text-gray-600" data-tab="gemini-tab" role="tab" aria-selected="false" aria-controls="gemini-tab" id="tab-gemini"><?php _e('Gemini', 'alchemer-reviews'); ?></button>
-                </div>
+                <!-- API Settings Header -->
                 <div class="alchemer-tab-content alchemer-tab-active" id="alchemer-tab">
                     <!-- Alchemer API Settings and Test Button (existing content) -->
                     <div class="dashboard-card w-full fade-in">
@@ -318,22 +314,7 @@ class Alchemer_Reviews_Settings {
                         </div>
                     </div>
                 </div>
-                <div class="alchemer-tab-content" id="gemini-tab" style="display:none;">
-                    <div class="dashboard-card w-full fade-in">
-                        <h2 class="text-xl font-medium text-gray-800 mb-4"><?php _e('Test Gemini API Connection', 'alchemer-reviews'); ?></h2>
-                        <p class="text-gray-600 mb-4"><?php _e('Verify the Gemini API connection. No credentials required.', 'alchemer-reviews'); ?></p>
-                        <div class="bg-gray-50 p-4 rounded-lg mb-4">
-                            <div class="flex items-center">
-                                <button type="button" id="test-gemini-connection" class="alchemer-button alchemer-button-secondary">
-                                    <span class="dashicons dashicons-database-view mr-1"></span>
-                                    <?php _e('Test API Connection', 'alchemer-reviews'); ?>
-                                </button>
-                                <div class="spinner ml-3 hidden" id="gemini-connection-spinner"></div>
-                            </div>
-                            <div id="test-gemini-connection-result" class="mt-3"></div>
-                        </div>
-                    </div>
-                </div>
+
                 <?php do_action( 'alchemer_reviews_after_settings' ); ?>
             </div>
         </div>
@@ -411,51 +392,7 @@ class Alchemer_Reviews_Settings {
         }
     }
 
-    /**
-     * AJAX handler for testing Gemini API connection
-     *
-     * @since 1.0.0
-     * @return void
-     */
-    public function ajax_test_gemini_api_connection() {
-        check_ajax_referer( 'test_alchemer_api_connection', 'nonce' );
-        if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'alchemer-reviews' ) ) );
-        }
-        // Try both getenv and $_ENV for maximum compatibility
-        $api_key = getenv('GEMINI_API_KEY');
-        if (empty($api_key) && isset($_ENV['GEMINI_API_KEY'])) {
-            $api_key = $_ENV['GEMINI_API_KEY'];
-        }
-        // Debug logging (optional, remove after troubleshooting)
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('GEMINI_API_KEY from getenv: ' . getenv('GEMINI_API_KEY'));
-            error_log('GEMINI_API_KEY from _ENV: ' . (isset($_ENV['GEMINI_API_KEY']) ? $_ENV['GEMINI_API_KEY'] : 'not set'));
-        }
-        if ( empty( $api_key ) ) {
-            wp_send_json_error( array( 'message' => __( 'Gemini API key is not configured on the server.', 'alchemer-reviews' ) ) );
-        }
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . $api_key;
-        $body = json_encode([
-            'contents' => [
-                [ 'parts' => [ [ 'text' => 'ping' ] ] ]
-            ]
-        ]);
-        $response = wp_remote_post( $url, [
-            'headers' => [ 'Content-Type' => 'application/json' ],
-            'body' => $body,
-            'timeout' => 15,
-        ]);
-        if ( is_wp_error( $response ) ) {
-            wp_send_json_error( array( 'message' => $response->get_error_message() ) );
-        }
-        $code = wp_remote_retrieve_response_code( $response );
-        if ( $code === 200 ) {
-            wp_send_json_success( array( 'message' => __( 'Gemini API connection successful!', 'alchemer-reviews' ) ) );
-        } else {
-            wp_send_json_error( array( 'message' => __( 'Gemini API connection failed.', 'alchemer-reviews' ) ) );
-        }
-    }
+
 
     /**
      * Get plugin settings

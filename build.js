@@ -8,7 +8,7 @@ const pluginVersion = packageJson.version;
 const sourceDir = __dirname;
 const buildDir = path.join(sourceDir, 'build');
 const distDir = path.join(sourceDir, 'dist');
-const outputFilePath = path.join(distDir, `${pluginName}-${pluginVersion}.zip`);
+const outputFilePath = path.join(distDir, `${pluginName}.zip`);
 
 // Ensure build and dist directories exist
 fs.ensureDirSync(buildDir);
@@ -86,7 +86,7 @@ const excludePatterns = [
 ];
 
 console.log('Starting to package plugin...');
-console.log(`Version: ${pluginVersion}`);
+console.log(`Version: ${pluginVersion} (internal)`);
 
 // Helper function to check if a file should be excluded
 function shouldExclude(filePath) {

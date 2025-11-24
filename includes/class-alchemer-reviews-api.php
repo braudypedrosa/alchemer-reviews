@@ -133,7 +133,7 @@ class Alchemer_Reviews_API {
         
         // Make the request
         $response = wp_remote_get( $url, array(
-            'timeout' => 15,
+            'timeout' => 60,
             'headers' => array(
                 'Accept' => 'application/json',
             ),
@@ -204,7 +204,7 @@ class Alchemer_Reviews_API {
         
         // Make the request
         $response = wp_remote_get( $url, array(
-            'timeout' => 15,
+            'timeout' => 60,
             'headers' => array(
                 'Accept' => 'application/json',
             ),
@@ -273,7 +273,7 @@ class Alchemer_Reviews_API {
         
         // Make the request
         $response = wp_remote_get( $url, array(
-            'timeout' => 15,
+            'timeout' => 60,
             'headers' => array(
                 'Accept' => 'application/json',
             ),
@@ -342,7 +342,7 @@ class Alchemer_Reviews_API {
         
         // Make the request
         $response = wp_remote_get( $url, array(
-            'timeout' => 15,
+            'timeout' => 60,
             'headers' => array(
                 'Accept' => 'application/json',
             ),
@@ -411,7 +411,7 @@ class Alchemer_Reviews_API {
         // Default arguments
         $default_args = array(
             'page' => 1,
-            'resultsperpage' => 50,
+            'resultsperpage' => 20, // Reduced batch size to prevent timeouts
             'completed' => 'true',
             'filter_field' => '',
             'filter_value' => '',
@@ -470,7 +470,7 @@ class Alchemer_Reviews_API {
         
         // Make the request
         $response = wp_remote_get( $url, array(
-            'timeout' => 30, // Increase timeout for potentially large datasets
+            'timeout' => 120, // Increased timeout for potentially large datasets
             'headers' => array(
                 'Accept' => 'application/json',
             ),

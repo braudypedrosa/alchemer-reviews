@@ -191,9 +191,7 @@
                 html += '<span class="text-lg font-medium">' + (reviewData.reviewer_name || 'Anonymous') + '</span>';
                 html += '<span class="ml-2 text-sm text-gray-500">' + (reviewData.rating || '0') + ' ★</span>';
                 html += '</div>';
-                html += '<div class="sentiment-badge ' + (aiAnalysis.sentiment.toLowerCase() === 'positive' ? 'positive' : 'negative') + '">';
-                html += aiAnalysis.sentiment;
-                html += '</div>';
+
                 html += '</div>';
                 
                 // Original content
@@ -202,18 +200,14 @@
                 html += '<div class="p-3 bg-gray-50 rounded">' + (reviewData.content || 'No content available') + '</div>';
                 html += '</div>';
                 
-                // AI suggestion
-                html += '<div class="mb-4">';
-                html += '<h4 class="text-sm font-medium text-gray-700 mb-2">AI Suggestion</h4>';
-                html += '<div class="p-3 bg-blue-50 rounded">' + (aiAnalysis.suggestion || reviewData.content || 'No suggestion available') + '</div>';
-                html += '</div>';
+
                 
                 // Action buttons
                 html += '<div class="review-actions">';
                 html += '<button class="edit-review alchemer-button alchemer-button-secondary" data-response-id="' + responseId + '">Edit</button>';
                 html += '<button class="reject-review alchemer-button alchemer-button-secondary" data-response-id="' + responseId + '">Reject</button>';
                 html += '<button class="accept-review alchemer-button alchemer-button-primary" data-response-id="' + responseId + '">Accept</button>';
-                html += '<button class="accept-with-ai alchemer-button alchemer-button-primary" data-response-id="' + responseId + '">Accept with AI Suggestion</button>';
+
                 html += '</div>';
                 
                 html += '</div>'; // End review-card
@@ -268,16 +262,7 @@
                 }
             });
             
-            $('.accept-with-ai').on('click', function() {
-                const responseId = $(this).data('response-id');
-                const review = reviews.find(r => r.review_data.response_id == responseId);
-                if (review) {
-                    processReview(responseId, review, true, true);
-                } else {
-                    console.error('Review not found for response ID:', responseId);
-                    Toast.show('Error', 'Review not found', 'error');
-                }
-            });
+
             
             $('.reject-review').on('click', function() {
                 const responseId = $(this).data('response-id');
@@ -335,9 +320,7 @@
         // Process a single review
         function processReview(responseId, review, accept, useAI = false) {
             const $reviewCard = $('.review-card[data-response-id="' + responseId + '"]');
-            const $button = accept ? 
-                (useAI ? $reviewCard.find('.accept-with-ai') : $reviewCard.find('.accept-review')) :
-                $reviewCard.find('.reject-review');
+            const $button = accept ? $reviewCard.find('.accept-review') : $reviewCard.find('.reject-review');
             
             $button.prop('disabled', true);
             $reviewCard.addClass('processing');
@@ -347,15 +330,9 @@
                 response_id: review.review_data.response_id,
                 reviewer_name: review.review_data.reviewer_name || 'Anonymous',
                 rating: review.review_data.rating || 0,
-                content: accept && useAI ? 
-                    (review.review_data.ai_analysis?.suggestion || review.review_data.content) : 
-                    review.review_data.content,
+                content: review.review_data.content,
                 post_date: review.review_data.post_date || new Date().toISOString(),
-                review_date: review.review_data.review_date || new Date().toLocaleDateString(),
-                ai_analysis: {
-                    sentiment: review.review_data.ai_analysis?.sentiment || 'Unknown',
-                    suggestion: review.review_data.ai_analysis?.suggestion || review.review_data.content
-                }
+                review_date: review.review_data.review_date || new Date().toLocaleDateString()
             };
             
             // Debug log
@@ -375,12 +352,10 @@
                     if (response.success) {
                         // Show success toast with appropriate message and type
                         Toast.show(
-                            accept ? (useAI ? 'Review Accepted with AI Suggestion' : 'Review Accepted') : 'Review Rejected',
+                            accept ? 'Review Accepted' : 'Review Rejected',
                             accept ? 
-                                (useAI ? 
-                                'The review has been published with the AI-suggested content.' :
-                                    'The review has been published with the original content.') :
-                                'The review has been saved as a draft with the original content. You can find it in the Reviews list.',
+                                'The review has been published.' :
+                                'The review has been saved as a draft. You can find it in the Reviews list.',
                             accept ? 'success' : 'reject'
                         );
                         

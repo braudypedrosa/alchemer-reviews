@@ -167,39 +167,4 @@ input:checked + .alchemer-toggle-slider:before {
     margin-bottom: 15px;
 }
 
-/* AI Suggestion Meta Box */
-#ai_suggestion {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    margin-bottom: 15px;
-}
-
-/* Side-by-Side Layout */
-.alchemer-meta-box-container {
-    display: flex;
-    gap: 20px;
-}
-
-.alchemer-meta-box-container .postbox {
-    flex: 1;
-}
-
-/* Button Styles */
-#approve-ai-suggestion {
-    margin-top: 10px;
-}
-
-/* Highlight Differences */
-.original-review-content ins,
-#ai_suggestion ins {
-    background-color: #e6ffe6;
-    text-decoration: none;
-}
-
-.original-review-content del,
-#ai_suggestion del {
-    background-color: #ffe6e6;
-    text-decoration: none;
-} 
+ 

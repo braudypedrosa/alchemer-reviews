@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Alchemer Reviews
  * Description: A plugin to import and manage Alchemer survey responses as reviews in WordPress.
- * Version: 1.0.2
+ * Version: 1.0.5
  * Author: Braudy Pedrosa
  * Text Domain: alchemer-reviews
  * Domain Path: /languages
@@ -14,7 +14,7 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
     /**
      * Load environment variables from .env file using vlucas/phpdotenv
      *
-     * @since 1.0.1
+     * @since 1.0.3
      */
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
     $dotenv->safeLoad();
@@ -26,7 +26,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 // Define plugin constants
-define( 'ALCHEMER_REVIEWS_VERSION', '1.0.1' );
+define( 'ALCHEMER_REVIEWS_VERSION', '1.0.5' );
 define( 'ALCHEMER_REVIEWS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ALCHEMER_REVIEWS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 

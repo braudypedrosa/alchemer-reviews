@@ -436,14 +436,14 @@ class Alchemer_Reviews_Importer {
                                         <?php _e('Maximum Reviews to Import', 'alchemer-reviews'); ?>
                                     </label>
                                     <div class="flex items-center">
-                                        <input type="number" id="max-reviews" name="max_reviews" min="1" max="100" value="20" 
+                                        <input type="number" id="max-reviews" name="max_reviews" min="1" max="50" value="10" 
                                                class="form-input block w-full sm:text-sm rounded-md" />
                                         <div class="ml-2 text-sm text-gray-500">
-                                            <?php _e('(1-100)', 'alchemer-reviews'); ?>
+                                            <?php _e('(1-50)', 'alchemer-reviews'); ?>
                                         </div>
                                     </div>
                                     <p class="text-xs text-gray-500 mt-1">
-                                        <?php _e('Limit the number of reviews to import in this batch.', 'alchemer-reviews'); ?>
+                                        <?php _e('Limit the number of reviews to import in this batch. For best results and to avoid timeouts, we recommend importing 20 or fewer reviews at a time.', 'alchemer-reviews'); ?>
                                     </p>
                                 </div>
                                 
@@ -763,7 +763,7 @@ class Alchemer_Reviews_Importer {
                 error_log('Getting AI analysis for content: ' . substr($review_data['data']['content'], 0, 100) . '...');
             }
             
-            $ai_analysis = $this->get_gemini_sentiment_and_suggestion($review_data['data']['content']);
+            $ai_analysis = $this->get_review_analysis($review_data['data']['content']);
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('AI Analysis Result: ' . print_r($ai_analysis, true));
@@ -1142,12 +1142,7 @@ class Alchemer_Reviews_Importer {
         update_post_meta($post_id, '_alchemer_rating', $rating);
         update_post_meta($post_id, '_alchemer_review_date', $review_date);
         
-        // Only save AI analysis if it exists
-        if (isset($review_data['ai_analysis'])) {
-            $ai_analysis = $review_data['ai_analysis'];
-            update_post_meta($post_id, 'ai_sentiment', isset($ai_analysis['sentiment']) ? sanitize_text_field($ai_analysis['sentiment']) : 'Unknown');
-            update_post_meta($post_id, 'ai_suggestion', isset($ai_analysis['suggestion']) ? wp_kses_post($ai_analysis['suggestion']) : $content);
-        }
+        
         
         update_post_meta($post_id, '_alchemer_manually_edited', '0');
         return array(
@@ -1202,202 +1197,15 @@ class Alchemer_Reviews_Importer {
     }
 
     /**
-     * Call Gemini API for sentiment and suggestion
+     * Placeholder for future AI integration
      *
      * @param string $content The review content
-     * @return array [ 'sentiment' => 'Positive'|'Negative', 'suggestion' => string ]
+     * @return array [ 'sentiment' => 'Unknown', 'suggestion' => string ]
      */
-    public function get_gemini_sentiment_and_suggestion($content) {
-        // Debug logging
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('=== Gemini API Analysis Start ===');
-            error_log('Input content type: ' . gettype($content));
-            error_log('Input content: ' . print_r($content, true));
-        }
-
-        // Validate content
-        if (empty($content)) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Empty content provided to Gemini API');
-            }
-            return array(
-                'sentiment' => 'Unknown',
-                'suggestion' => ''
-            );
-        }
-
-        // Ensure content is a string
-        if (!is_string($content)) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Content is not a string, converting...');
-            }
-            $content = is_array($content) ? json_encode($content) : (string)$content;
-        }
-
-        // Clean and prepare the content
-        $clean_content = trim(strip_tags($content));
-        if (empty($clean_content)) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Content is empty after cleaning');
-            }
-            return array(
-                'sentiment' => 'Unknown',
-                'suggestion' => $content
-            );
-        }
-
-        $api_key = getenv('GEMINI_API_KEY');
-        if (empty($api_key) && isset($_ENV['GEMINI_API_KEY'])) {
-            $api_key = $_ENV['GEMINI_API_KEY'];
-        }
-        if (empty($api_key)) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Gemini API key not found in environment variables');
-            }
-            return array(
-                'sentiment' => 'Unknown',
-                'suggestion' => $clean_content
-            );
-        }
-
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . $api_key;
-        
-        // Updated prompt to explicitly request plain text without formatting
-        $prompt = "Analyze this customer review and provide a response in the following format. Do not use any formatting characters like asterisks or quotes in your response:
-
-Sentiment: [Positive or Negative]
-Improved Version: [Your improved version of the review that maintains the same meaning but is more professional and clear. Write in plain text without any formatting characters.]
-
-Review: {$clean_content}";
-        
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('Sending prompt to Gemini API: ' . substr($prompt, 0, 100) . '...');
-        }
-
-        $body = json_encode(array(
-            'contents' => array(
-                array('parts' => array(array('text' => $prompt)))
-            ),
-            'generationConfig' => array(
-                'temperature' => 0.7,
-                'topK' => 40,
-                'topP' => 0.95,
-                'maxOutputTokens' => 1024,
-            )
-        ));
-
-        if ($body === false) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Failed to encode Gemini API request body: ' . json_last_error_msg());
-            }
-            return array(
-                'sentiment' => 'Unknown',
-                'suggestion' => $clean_content
-            );
-        }
-
-        $response = wp_remote_post($url, array(
-            'headers' => array('Content-Type' => 'application/json'),
-            'body' => $body,
-            'timeout' => 30,
-        ));
-
-        if (is_wp_error($response)) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Gemini API request failed: ' . $response->get_error_message());
-            }
-            return array(
-                'sentiment' => 'Unknown',
-                'suggestion' => $clean_content
-            );
-        }
-
-        $response_code = wp_remote_retrieve_response_code($response);
-        if ($response_code !== 200) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Gemini API returned non-200 status code: ' . $response_code);
-                error_log('Response body: ' . wp_remote_retrieve_body($response));
-            }
-            return array(
-                'sentiment' => 'Unknown',
-                'suggestion' => $clean_content
-            );
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Failed to decode Gemini API response: ' . json_last_error_msg());
-                error_log('Raw response: ' . $body);
-            }
-            return array(
-                'sentiment' => 'Unknown',
-                'suggestion' => $clean_content
-            );
-        }
-
-        if (!isset($data['candidates'][0]['content']['parts'][0]['text'])) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Unexpected Gemini API response structure: ' . print_r($data, true));
-            }
-            return array(
-                'sentiment' => 'Unknown',
-                'suggestion' => $clean_content
-            );
-        }
-
-        $text = $data['candidates'][0]['content']['parts'][0]['text'];
-        
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('Raw Gemini API response text: ' . $text);
-        }
-        
-        // Parse sentiment and suggestion from the response
-        $sentiment = 'Unknown';
-        $suggestion = $clean_content; // Default to original content if parsing fails
-
-            // Extract sentiment
-        if (preg_match('/Sentiment:\s*(Positive|Negative)/i', $text, $matches)) {
-                $sentiment = ucfirst(strtolower($matches[1]));
-            }
-
-        // Extract suggestion and clean it
-        if (preg_match('/Improved Version:\s*(.+?)(?:\n|$)/s', $text, $matches)) {
-            $suggestion = trim($matches[1]);
-            // Remove any formatting characters
-            $suggestion = str_replace(array('**', '*', '"', '"', '"', "'", "'", '`'), '', $suggestion);
-            // Remove any leading/trailing quotes
-            $suggestion = trim($suggestion, '"\'');
-        } else {
-            // Fallback: try to find any substantial text after "Improved Version:"
-            $parts = explode('Improved Version:', $text);
-            if (count($parts) > 1) {
-                $suggestion = trim($parts[1]);
-                // Remove any trailing sentiment analysis
-                $suggestion = preg_replace('/\n.*$/', '', $suggestion);
-                // Remove any formatting characters
-                $suggestion = str_replace(array('**', '*', '"', '"', '"', "'", "'", '`'), '', $suggestion);
-                // Remove any leading/trailing quotes
-                $suggestion = trim($suggestion, '"\'');
-            }
-        }
-
-        // If we still don't have a good suggestion, use the original content
-        if (empty($suggestion) || strlen($suggestion) < 10) {
-            $suggestion = $clean_content;
-        }
-
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('Extracted Sentiment: ' . $sentiment);
-            error_log('Extracted Suggestion: ' . $suggestion);
-            error_log('=== Gemini API Analysis End ===');
-        }
-
+    public function get_review_analysis($content) {
         return array(
-            'sentiment' => $sentiment,
-            'suggestion' => $suggestion
+            'sentiment' => 'Unknown',
+            'suggestion' => $content
         );
     }
 

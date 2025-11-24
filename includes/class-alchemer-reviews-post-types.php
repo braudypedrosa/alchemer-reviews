@@ -42,11 +42,7 @@ class Alchemer_Reviews_Post_Types {
         // AJAX handler for toggle skip overwrite
         add_action( 'wp_ajax_toggle_skip_overwrite', array( $this, 'ajax_toggle_skip_overwrite' ) );
         
-        // AJAX handler to approve AI review
-        add_action( 'wp_ajax_approve_ai_review', array( $this, 'ajax_approve_ai_review' ) );
-        
-        // AJAX handler to generate an AI suggestion for a review
-        add_action( 'wp_ajax_generate_ai_suggestion', array( $this, 'ajax_generate_ai_suggestion' ) );
+
     }
 
     /**
@@ -116,14 +112,7 @@ class Alchemer_Reviews_Post_Types {
             'side',
             'high'
         );
-        add_meta_box(
-            'alchemer_ai_suggestion',
-            __( 'AI Suggestion', 'alchemer-reviews' ),
-            array( $this, 'render_ai_suggestion_meta_box' ),
-            'alchemer-review',
-            'normal',
-            'high'
-        );
+
         add_meta_box(
             'alchemer_original_review',
             __( 'Original Review Content', 'alchemer-reviews' ),
@@ -191,23 +180,7 @@ class Alchemer_Reviews_Post_Types {
         <?php
     }
 
-    /**
-     * Render the AI suggestion meta box
-     *
-     * @param WP_Post $post The post object.
-     * @return void
-     */
-    public function render_ai_suggestion_meta_box( $post ) {
-        wp_nonce_field( 'alchemer_ai_suggestion', 'alchemer_ai_suggestion_nonce' );
-        $ai_suggestion = get_post_meta( $post->ID, 'ai_suggestion', true );
-        $pending = get_post_meta( $post->ID, 'pending_ai_approval', true );
-        if ( $pending === '1' && !empty($ai_suggestion) ) {
-            echo '<textarea id="ai_suggestion" name="ai_suggestion" class="widefat" rows="5">' . esc_textarea($ai_suggestion) . '</textarea>';
-            echo '<p><button type="button" class="button button-primary" id="approve-ai-suggestion">' . __( 'Approve AI Suggestion', 'alchemer-reviews' ) . '</button></p>';
-        } else {
-            echo '<p>' . __( 'No AI suggestion available or already approved.', 'alchemer-reviews' ) . '</p>';
-        }
-    }
+
 
     /**
      * Render the original review content meta box
@@ -351,9 +324,7 @@ class Alchemer_Reviews_Post_Types {
                 break;
                 
             case 'actions':
-                echo '<span class="generate-ai-suggestion" data-post-id="' . esc_attr($post_id) . '" title="Generate AI suggestion" style="cursor:pointer;display:inline-block;vertical-align:middle;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 6.2l1.4-1.4"/><path d="M17.8 11.8l1.4 1.4"/><path d="M2 15l6 6"/><path d="M8 21l-6-6"/><path d="M18 9a6 6 0 1 1-6-6"/></svg>
-                </span>';
+                echo '<!-- Actions column -->';
                 break;
         }
     }
@@ -575,87 +546,5 @@ class Alchemer_Reviews_Post_Types {
         }
     }
 
-    /**
-     * AJAX handler to approve AI review: overwrite post_content with ai_suggestion, set pending_ai_approval=0, and publish the post
-     *
-     * @return void
-     */
-    public function ajax_approve_ai_review() {
-        if ( ! isset( $_POST['post_id'] ) || ! isset( $_POST['nonce'] ) ) {
-            wp_send_json_error( array( 'message' => __( 'Missing required data', 'alchemer-reviews' ) ) );
-        }
-        $post_id = intval( $_POST['post_id'] );
-        $nonce = sanitize_text_field( $_POST['nonce'] );
-        // Debug logging for nonce and user
-        if ( defined('WP_DEBUG') && WP_DEBUG ) {
-            error_log('AJAX approve_ai_review: Nonce received: ' . $nonce);
-            error_log('AJAX approve_ai_review: Fresh nonce: ' . wp_create_nonce('test_alchemer_api_connection'));
-            error_log('AJAX approve_ai_review: Current user ID: ' . get_current_user_id());
-        }
-        if ( ! wp_verify_nonce( $nonce, 'test_alchemer_api_connection' ) ) {
-            wp_send_json_error( array( 'message' => __( 'Security check failed', 'alchemer-reviews' ) ) );
-        }
-        if ( ! current_user_can( 'edit_post', $post_id ) ) {
-            wp_send_json_error( array( 'message' => __( 'You do not have permission to approve this review', 'alchemer-reviews' ) ) );
-        }
-        $ai_suggestion = isset( $_POST['ai_suggestion'] ) ? wp_kses_post( $_POST['ai_suggestion'] ) : get_post_meta( $post_id, 'ai_suggestion', true );
-        if ( empty( $ai_suggestion ) ) {
-            wp_send_json_error( array( 'message' => __( 'No AI suggestion found for this review.', 'alchemer-reviews' ) ) );
-        }
-        // Overwrite post_content and publish
-        $update = wp_update_post( array(
-            'ID' => $post_id,
-            'post_content' => $ai_suggestion,
-            'post_status' => 'publish',
-        ), true );
-        if ( is_wp_error( $update ) ) {
-            wp_send_json_error( array( 'message' => $update->get_error_message() ) );
-        }
-        update_post_meta( $post_id, 'pending_ai_approval', '0' );
-        wp_send_json_success( array( 'message' => __( 'Review approved and published.', 'alchemer-reviews' ) ) );
-    }
 
-    /**
-     * AJAX handler to generate an AI suggestion for a review
-     *
-     * @return void
-     */
-    public function ajax_generate_ai_suggestion() {
-        // Check permissions and nonce
-        if ( ! isset( $_POST['post_id'] ) || ! isset( $_POST['nonce'] ) ) {
-            wp_send_json_error( array( 'message' => __( 'Missing required data', 'alchemer-reviews' ) ) );
-        }
-        $post_id = intval( $_POST['post_id'] );
-        $nonce = sanitize_text_field( $_POST['nonce'] );
-        // Debug logging for nonce and user
-        if ( defined('WP_DEBUG') && WP_DEBUG ) {
-            error_log('AJAX generate_ai_suggestion: Nonce received: ' . $nonce);
-            error_log('AJAX generate_ai_suggestion: Fresh nonce: ' . wp_create_nonce('test_alchemer_api_connection'));
-            error_log('AJAX generate_ai_suggestion: Current user ID: ' . get_current_user_id());
-        }
-        if ( ! wp_verify_nonce( $nonce, 'test_alchemer_api_connection' ) ) {
-            wp_send_json_error( array( 'message' => __( 'Security check failed', 'alchemer-reviews' ) ) );
-        }
-        if ( ! current_user_can( 'edit_post', $post_id ) ) {
-            wp_send_json_error( array( 'message' => __( 'You do not have permission to generate an AI suggestion for this review', 'alchemer-reviews' ) ) );
-        }
-        $post = get_post( $post_id );
-        if ( ! $post || 'alchemer-review' !== $post->post_type ) {
-            wp_send_json_error( array( 'message' => __( 'Invalid review', 'alchemer-reviews' ) ) );
-        }
-        $content = $post->post_content;
-        if ( empty( $content ) ) {
-            wp_send_json_error( array( 'message' => __( 'No review content found.', 'alchemer-reviews' ) ) );
-        }
-        // Load the importer class and call Gemini
-        if ( ! class_exists( 'Alchemer_Reviews_Importer' ) ) {
-            require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-importer.php';
-        }
-        $importer = new Alchemer_Reviews_Importer();
-        $ai = $importer->get_gemini_sentiment_and_suggestion( $content );
-        if ( empty( $ai['suggestion'] ) ) {
-            wp_send_json_error( array( 'message' => __( 'AI did not return a suggestion.', 'alchemer-reviews' ) ) );
-        }
-        wp_send_json_success( array( 'suggestion' => $ai['suggestion'], 'sentiment' => $ai['sentiment'] ) );
-    }
 } 
