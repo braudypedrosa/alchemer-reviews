@@ -64,8 +64,11 @@ class Alchemer_Reviews_Importer {
         // Register settings for field mappings
         add_action('admin_init', array($this, 'register_field_mapping_settings'));
         
-        // Schedule daily import if auto-import is enabled
-        add_action('alchemer_reviews_daily_import', array($this, 'import_reviews'));
+        // Durable daily sync for new survey responses
+        add_action('alchemer_reviews_daily_import', array($this, 'run_daily_sync'));
+
+        // Surface pending imported reviews on the WordPress Dashboard.
+        add_action('admin_notices', array($this, 'render_pending_reviews_dashboard_notice'));
         
         // Enqueue Tailwind for admin pages
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_styles'), 100);
@@ -220,29 +223,30 @@ class Alchemer_Reviews_Importer {
      */
     public function sanitize_field_mappings($input) {
         $sanitized_input = array();
+        $current_mappings = $this->get_field_mappings();
 
         foreach ($this->default_field_mappings as $field => $default) {
             if (isset($input[$field])) {
                 $sanitized_input[$field] = sanitize_text_field($input[$field]);
             } else {
-                $sanitized_input[$field] = $default;
+                $sanitized_input[$field] = isset($current_mappings[$field]) ? $current_mappings[$field] : $default;
             }
         }
 
-        // Handle auto-import setting
-        if (isset($input['auto_import'])) {
-            $sanitized_input['auto_import'] = (bool) $input['auto_import'];
-            
-            // Schedule or unschedule the daily import event
-            if ($sanitized_input['auto_import']) {
-                if (!wp_next_scheduled('alchemer_reviews_daily_import')) {
-                    wp_schedule_event(time(), 'daily', 'alchemer_reviews_daily_import');
-                }
-            } else {
-                wp_clear_scheduled_hook('alchemer_reviews_daily_import');
-            }
+        $auto_import_submitted = isset($input['auto_import_submitted']);
+
+        if ($auto_import_submitted) {
+            $sanitized_input['auto_import'] = !empty($input['auto_import']);
         } else {
-            $sanitized_input['auto_import'] = false;
+            $sanitized_input['auto_import'] = !empty($current_mappings['auto_import']);
+        }
+
+        // Schedule or unschedule the daily import event only when the setting changes or needs repair.
+        if ($sanitized_input['auto_import']) {
+            if (!wp_next_scheduled('alchemer_reviews_daily_import')) {
+                wp_schedule_event(time() + MINUTE_IN_SECONDS, 'daily', 'alchemer_reviews_daily_import');
+            }
+        } elseif ($auto_import_submitted) {
             wp_clear_scheduled_hook('alchemer_reviews_daily_import');
         }
 
@@ -324,6 +328,7 @@ class Alchemer_Reviews_Importer {
         
         echo '<div class="form-input-container w-full">';
         echo '<div class="flex items-center">';
+        echo '<input type="hidden" name="alchemer_reviews_field_mappings[auto_import_submitted]" value="1">';
         echo '<input class="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" type="checkbox" id="auto_import" name="alchemer_reviews_field_mappings[auto_import]" value="1" ' . $checked . '>';
         echo '<label class="ml-2 block text-sm text-gray-700" for="auto_import">' . __('Automatically import new reviews daily', 'alchemer-reviews') . '</label>';
         echo '</div>';
@@ -436,14 +441,14 @@ class Alchemer_Reviews_Importer {
                                         <?php _e('Maximum Reviews to Import', 'alchemer-reviews'); ?>
                                     </label>
                                     <div class="flex items-center">
-                                        <input type="number" id="max-reviews" name="max_reviews" min="1" max="50" value="10" 
+                                        <input type="number" id="max-reviews" name="max_reviews" min="1" max="100" value="10"
                                                class="form-input block w-full sm:text-sm rounded-md" />
                                         <div class="ml-2 text-sm text-gray-500">
-                                            <?php _e('(1-50)', 'alchemer-reviews'); ?>
+                                            <?php _e('(1-100)', 'alchemer-reviews'); ?>
                                         </div>
                                     </div>
                                     <p class="text-xs text-gray-500 mt-1">
-                                        <?php _e('Limit the number of reviews to import in this batch. For best results and to avoid timeouts, we recommend importing 20 or fewer reviews at a time.', 'alchemer-reviews'); ?>
+                                        <?php _e('The importer scans newest responses first and keeps paginating until it finds this many net-new reviews or reaches the last API page.', 'alchemer-reviews'); ?>
                                     </p>
                                 </div>
                                 
@@ -497,6 +502,7 @@ class Alchemer_Reviews_Importer {
                         $options = $this->get_field_mappings();
                         $checked = isset($options['auto_import']) && $options['auto_import'] ? 'checked' : '';
                         ?>
+                        <input type="hidden" name="alchemer_reviews_field_mappings[auto_import_submitted]" value="1">
                         
                         <div class="flex items-center mb-4">
                             <input class="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" 
@@ -598,14 +604,15 @@ class Alchemer_Reviews_Importer {
             ));
         }
         
-        // Get import parameters
-        $max_reviews = isset($_POST['max_reviews']) ? intval($_POST['max_reviews']) : 20;
+        // Get import parameters. Manual imports are always net-new and max-bound.
+        $max_reviews = isset($_POST['max_reviews']) ? max(1, intval($_POST['max_reviews'])) : 20;
         $target_rating = isset($_POST['target_rating']) ? intval($_POST['target_rating']) : 0;
         
         // Prepare import arguments
         $import_args = array(
             'max_reviews' => $max_reviews,
             'target_rating' => $target_rating,
+            'import_all_new' => false,
         );
         
         // Import reviews
@@ -616,7 +623,12 @@ class Alchemer_Reviews_Importer {
                 'message' => $result['message'],
                 'reviews' => $result['reviews'],
                 'total_found' => $result['total_found'],
-                'skipped' => $result['skipped']
+                'skipped' => $result['skipped'],
+                'skipped_existing' => isset($result['skipped_existing']) ? $result['skipped_existing'] : 0,
+                'skipped_no_content' => isset($result['skipped_no_content']) ? $result['skipped_no_content'] : 0,
+                'skipped_wrong_rating' => isset($result['skipped_wrong_rating']) ? $result['skipped_wrong_rating'] : 0,
+                'pages_fetched' => isset($result['pages_fetched']) ? $result['pages_fetched'] : 0,
+                'import_all_new' => !empty($result['import_all_new'])
             ));
         } else {
             wp_send_json_error(array(
@@ -644,7 +656,7 @@ class Alchemer_Reviews_Importer {
         // Get review data
         $review_data = isset($_POST['review_data']) ? $_POST['review_data'] : array();
         $accept = isset($_POST['accept']) ? (bool) $_POST['accept'] : false;
-        $use_ai = isset($_POST['use_ai']) ? (bool) $_POST['use_ai'] : false;
+        $edited = isset($_POST['edited']) ? (bool) $_POST['edited'] : false;
         
         if (empty($review_data)) {
             wp_send_json_error(array(
@@ -653,15 +665,13 @@ class Alchemer_Reviews_Importer {
         }
         
         // Process the review
-        $result = $this->process_review($review_data, $accept, $use_ai);
+        $result = $this->process_review($review_data, $accept, $edited);
         
         if ($result['success']) {
             wp_send_json_success(array(
                 'message' => sprintf(
                     __('Review %s successfully.', 'alchemer-reviews'),
-                    $accept ? 
-                        ($use_ai ? 'accepted with AI suggestion' : 'accepted with original content') : 
-                        'rejected and saved as draft'
+                    $accept ? 'accepted' : 'rejected and saved as draft'
                 ),
                 'post_id' => $result['post_id'],
                 'status' => $result['status']
@@ -704,24 +714,29 @@ class Alchemer_Reviews_Importer {
         $default_args = array(
             'max_reviews' => 20,
             'target_rating' => 0, // 0 means all ratings
+            'import_all_new' => false,
+            'stop_at_existing' => false,
         );
         
         // Merge with provided arguments
         $import_args = wp_parse_args($import_args, $default_args);
         
         // Extract import arguments
-        $max_reviews = intval($import_args['max_reviews']);
+        $import_all_new = !empty($import_args['import_all_new']) || intval($import_args['max_reviews']) <= 0;
+        $max_reviews = $import_all_new ? 0 : max(1, intval($import_args['max_reviews']));
         $target_rating = intval($import_args['target_rating']);
+        $stop_at_existing = !empty($import_args['stop_at_existing']);
+        $exclude_response_ids = isset($import_args['exclude_response_ids'])
+            ? array_filter(array_map('strval', (array) $import_args['exclude_response_ids']))
+            : $this->get_existing_response_ids();
         
         // Initialize counters
-        $created_count = 0;
-        $updated_count = 0;
         $skipped_count = 0;
-        $skipped_edited_count = 0;
-        $errors = array();
         
         // Get the responses from the API
-        $responses = $this->api->get_filtered_responses(array(), $max_reviews, $target_rating);
+        $responses = $this->api->get_filtered_responses(array(
+            'stop_at_existing' => $stop_at_existing,
+        ), $max_reviews, $target_rating, $exclude_response_ids);
         
         if (!$responses['success']) {
             return array(
@@ -732,10 +747,31 @@ class Alchemer_Reviews_Importer {
         }
         
         if (empty($responses['data'])) {
+            $skipped_existing = isset($responses['skipped_existing']) ? intval($responses['skipped_existing']) : 0;
+            $skipped_no_content = isset($responses['skipped_no_content']) ? intval($responses['skipped_no_content']) : 0;
+            $skipped_wrong_rating = isset($responses['skipped_wrong_rating']) ? intval($responses['skipped_wrong_rating']) : 0;
+            $pages_fetched = isset($responses['pages_fetched']) ? intval($responses['pages_fetched']) : 0;
+            $message = !empty($responses['message']) ? $responses['message'] : __('No new responses found to import.', 'alchemer-reviews');
+
+            if ($skipped_existing > 0) {
+                $message .= ' ' . __('All fetched matching responses already exist in WordPress.', 'alchemer-reviews');
+            } elseif ($skipped_no_content > 0) {
+                $message .= ' ' . __('No review cards were created because fetched responses did not have a usable rating/comment field. Check the Rating Question mapping.', 'alchemer-reviews');
+            }
+
             return array(
                 'success' => true,
-                'message' => __('No new responses found to import.', 'alchemer-reviews'),
+                'message' => $message,
                 'imported_count' => 0,
+                'reviews' => array(),
+                'total_found' => 0,
+                'skipped' => $skipped_existing,
+                'skipped_existing' => $skipped_existing,
+                'skipped_no_content' => $skipped_no_content,
+                'skipped_wrong_rating' => $skipped_wrong_rating,
+                'pages_fetched' => $pages_fetched,
+                'import_all_new' => $import_all_new,
+                'reached_existing_boundary' => !empty($responses['reached_existing_boundary']),
             );
         }
 
@@ -758,34 +794,244 @@ class Alchemer_Reviews_Importer {
                 continue;
             }
 
-            // Get AI analysis
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Getting AI analysis for content: ' . substr($review_data['data']['content'], 0, 100) . '...');
+            $response_id = isset($review_data['data']['response_id']) ? strval($review_data['data']['response_id']) : '';
+            if ($response_id !== '' && in_array($response_id, $exclude_response_ids, true)) {
+                $skipped_count++;
+                continue;
             }
-            
-            $ai_analysis = $this->get_review_analysis($review_data['data']['content']);
-            
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('AI Analysis Result: ' . print_r($ai_analysis, true));
+
+            if ($response_id !== '') {
+                $exclude_response_ids[] = $response_id;
             }
-            
-            // Merge the review data with AI analysis
-            $final_review_data = array_merge($review_data['data'], array('ai_analysis' => $ai_analysis));
             
             // Add to reviews to process
             $reviews_to_process[] = array(
                 'response' => $response,
-                'review_data' => $final_review_data
+                'review_data' => $review_data['data']
             );
         }
 
         // Return the reviews for processing
+        $skipped_existing = isset($responses['skipped_existing']) ? intval($responses['skipped_existing']) : 0;
+
         return array(
             'success' => true,
-            'message' => sprintf(__('Found %d reviews to process.', 'alchemer-reviews'), count($reviews_to_process)),
+            'message' => sprintf(__('Found %d new reviews to process.', 'alchemer-reviews'), count($reviews_to_process)),
             'reviews' => $reviews_to_process,
             'total_found' => count($reviews_to_process),
-            'skipped' => $skipped_count
+            'skipped' => $skipped_count + $skipped_existing,
+            'skipped_existing' => $skipped_existing,
+            'skipped_no_content' => isset($responses['skipped_no_content']) ? intval($responses['skipped_no_content']) : 0,
+            'skipped_wrong_rating' => isset($responses['skipped_wrong_rating']) ? intval($responses['skipped_wrong_rating']) : 0,
+            'pages_fetched' => isset($responses['pages_fetched']) ? intval($responses['pages_fetched']) : 0,
+            'import_all_new' => !empty($responses['import_all_new']),
+            'reached_existing_boundary' => !empty($responses['reached_existing_boundary']),
+        );
+    }
+
+    /**
+     * Daily cron sync: fetch unseen responses and save them as pending draft reviews.
+     *
+     * @param array $sync_args Optional sync arguments.
+     * @return array Sync result.
+     */
+    public function run_daily_sync($sync_args = array()) {
+        $default_args = array(
+            'max_reviews' => 0,
+            'target_rating' => 0,
+            'import_all_new' => true,
+            'stop_at_existing' => true,
+        );
+
+        $sync_args = wp_parse_args($sync_args, $default_args);
+        $result = $this->import_reviews($sync_args);
+
+        if (!$result['success']) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Alchemer daily sync failed: ' . $result['message']);
+            }
+
+            return $result;
+        }
+
+        $created_count = 0;
+        $skipped_count = isset($result['skipped']) ? intval($result['skipped']) : 0;
+        $errors = array();
+
+        foreach ($result['reviews'] as $review) {
+            if (empty($review['review_data'])) {
+                $skipped_count++;
+                continue;
+            }
+
+            $save_result = $this->save_synced_review_as_pending($review['review_data']);
+
+            if ($save_result['success']) {
+                if (empty($save_result['skipped'])) {
+                    $created_count++;
+                } else {
+                    $skipped_count++;
+                }
+            } else {
+                $errors[] = $save_result['message'];
+            }
+        }
+
+        update_option('alchemer_reviews_last_sync_at', current_time('mysql'));
+        update_option('alchemer_reviews_last_sync_result', array(
+            'imported_count' => $created_count,
+            'skipped' => $skipped_count,
+            'pages_fetched' => isset($result['pages_fetched']) ? intval($result['pages_fetched']) : 0,
+            'reached_existing_boundary' => !empty($result['reached_existing_boundary']),
+        ));
+
+        return array(
+            'success' => empty($errors),
+            'message' => sprintf(
+                __('Daily sync saved %d new pending reviews and skipped %d existing reviews.', 'alchemer-reviews'),
+                $created_count,
+                $skipped_count
+            ),
+            'imported_count' => $created_count,
+            'skipped' => $skipped_count,
+            'pages_fetched' => isset($result['pages_fetched']) ? intval($result['pages_fetched']) : 0,
+            'import_all_new' => !empty($result['import_all_new']),
+            'reached_existing_boundary' => !empty($result['reached_existing_boundary']),
+            'errors' => $errors,
+        );
+    }
+
+    /**
+     * Show a Dashboard notice when imported reviews are waiting for approval.
+     *
+     * @return void
+     */
+    public function render_pending_reviews_dashboard_notice() {
+        if (!current_user_can('edit_posts')) {
+            return;
+        }
+
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen || $screen->id !== 'dashboard') {
+            return;
+        }
+
+        $pending_count = $this->count_pending_reviews();
+        if ($pending_count < 1) {
+            return;
+        }
+
+        $review_queue_url = admin_url('edit.php?post_type=alchemer-review&post_status=draft');
+        ?>
+        <div class="notice notice-info">
+            <p>
+                <?php
+                printf(
+                    esc_html(_n(
+                        '%d Alchemer review is pending for review.',
+                        '%d Alchemer reviews are pending for review.',
+                        $pending_count,
+                        'alchemer-reviews'
+                    )),
+                    intval($pending_count)
+                );
+                ?>
+                <a href="<?php echo esc_url($review_queue_url); ?>"><?php esc_html_e('Review now', 'alchemer-reviews'); ?></a>
+            </p>
+        </div>
+        <?php
+    }
+
+    /**
+     * Count imported reviews still waiting for approval.
+     *
+     * @return int Pending review count.
+     */
+    private function count_pending_reviews() {
+        $query = new WP_Query(array(
+            'post_type' => 'alchemer-review',
+            'post_status' => array('draft', 'pending'),
+            'posts_per_page' => 1,
+            'fields' => 'ids',
+            'no_found_rows' => false,
+            'meta_query' => array(
+                'relation' => 'OR',
+                array(
+                    'key' => '_alchemer_reviewed',
+                    'value' => '0',
+                ),
+                array(
+                    'key' => '_alchemer_review_decision',
+                    'value' => 'pending',
+                ),
+            ),
+        ));
+
+        return intval($query->found_posts);
+    }
+
+    /**
+     * Save a synced response as an unreviewed draft.
+     *
+     * @param array $review_data Prepared review data.
+     * @return array Save result.
+     */
+    private function save_synced_review_as_pending($review_data) {
+        $review_data = isset($review_data['data']) ? $review_data['data'] : $review_data;
+        $response_id = isset($review_data['response_id']) ? sanitize_text_field($review_data['response_id']) : '';
+
+        if (empty($response_id)) {
+            return array(
+                'success' => false,
+                'message' => __('Missing response ID', 'alchemer-reviews'),
+            );
+        }
+
+        if ($this->get_review_by_response_id($response_id)) {
+            return array(
+                'success' => true,
+                'skipped' => true,
+                'message' => __('Review already exists.', 'alchemer-reviews'),
+            );
+        }
+
+        $reviewer_name = isset($review_data['reviewer_name']) ? sanitize_text_field($review_data['reviewer_name']) : __('Anonymous', 'alchemer-reviews');
+        $content = isset($review_data['content']) ? wp_kses_post($review_data['content']) : '';
+        $post_date = isset($review_data['post_date']) ? sanitize_text_field($review_data['post_date']) : current_time('mysql');
+
+        if (empty($content)) {
+            return array(
+                'success' => false,
+                'message' => __('Missing review content', 'alchemer-reviews'),
+            );
+        }
+
+        $post_id = wp_insert_post(array(
+            'post_title' => $reviewer_name,
+            'post_content' => $content,
+            'post_status' => 'draft',
+            'post_type' => 'alchemer-review',
+            'post_date' => $post_date,
+        ));
+
+        if (is_wp_error($post_id)) {
+            return array(
+                'success' => false,
+                'message' => $post_id->get_error_message(),
+            );
+        }
+
+        $this->save_review_meta($post_id, $review_data, array(
+            'reviewed' => '0',
+            'decision' => 'pending',
+            'manual_protection' => '0',
+        ));
+
+        return array(
+            'success' => true,
+            'post_id' => $post_id,
+            'status' => 'pending',
+            'skipped' => false,
         );
     }
 
@@ -820,31 +1066,28 @@ class Alchemer_Reviews_Importer {
             error_log('Survey Data Keys: ' . implode(', ', array_keys($survey_data)));
         }
         
-        // Check if the rating question exists
-        if (!isset($survey_data[$rating_question_id])) {
+        $resolved_question = $this->resolve_review_question($survey_data, $rating_question_id);
+
+        if (!$resolved_question) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Rating question not found. Available keys: ' . implode(', ', array_keys($survey_data)));
+                error_log('Review rating/comment question not found. Available keys: ' . implode(', ', array_keys($survey_data)));
             }
             return array(
                 'success' => false,
-                'message' => sprintf(__('Rating question (ID: %s) not found in survey response.', 'alchemer-reviews'), $rating_question_id)
+                'message' => sprintf(__('No valid rating/comment question found. Please verify the mapped rating question (currently ID: %s).', 'alchemer-reviews'), $rating_question_id)
             );
         }
         
         // Get rating question data
-        $rating_question = $survey_data[$rating_question_id];
+        $rating_question = $resolved_question['question'];
         
         if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Resolved Rating Question ID: ' . $resolved_question['id']);
             error_log('Rating Question Data: ' . print_r($rating_question, true));
         }
         
         // Extract rating
-        $rating = 0;
-        if (isset($rating_question['answer'])) {
-            $rating = intval($rating_question['answer']);
-        } elseif (isset($rating_question['answer_id'])) {
-            $rating = intval($rating_question['answer_id']);
-        }
+        $rating = $this->extract_rating_value_from_question($rating_question);
         
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('Extracted Rating: ' . $rating);
@@ -861,15 +1104,11 @@ class Alchemer_Reviews_Importer {
         $content = '';
         
         // First try the rating question's comments
-        if (isset($rating_question['comments']) && !empty($rating_question['comments'])) {
-            $content = $rating_question['comments'];
+        $resolved_content = $this->get_content_from_question($rating_question);
+        if (!empty($resolved_content)) {
+            $content = $resolved_content;
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Found content in rating_question[comments]: ' . substr($content, 0, 100));
-            }
-        } elseif (isset($rating_question['comment']) && !empty($rating_question['comment'])) {
-            $content = $rating_question['comment'];
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Found content in rating_question[comment]: ' . substr($content, 0, 100));
+                error_log('Found content in resolved rating question: ' . substr($content, 0, 100));
             }
         }
         
@@ -997,7 +1236,7 @@ class Alchemer_Reviews_Importer {
             'meta_key' => '_alchemer_response_id',
             'meta_value' => $response_id,
             'posts_per_page' => 1,
-            'post_status' => array('publish', 'draft', 'pending')
+            'post_status' => array('publish', 'future', 'draft', 'pending', 'private', 'trash')
         );
 
         $query = new WP_Query($args);
@@ -1010,20 +1249,75 @@ class Alchemer_Reviews_Importer {
     }
 
     /**
-     * Process a single review with AI analysis, handling duplicates and skip overwrite
+     * Get all response IDs already represented by review posts.
      *
-     * @param array $review_data Review data including AI analysis
+     * @return array Response IDs.
+     */
+    private function get_existing_response_ids() {
+        $post_ids = get_posts(array(
+            'post_type' => 'alchemer-review',
+            'post_status' => array('publish', 'future', 'draft', 'pending', 'private', 'trash'),
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            'meta_query' => array(
+                array(
+                    'key' => '_alchemer_response_id',
+                    'compare' => 'EXISTS',
+                ),
+            ),
+        ));
+
+        $response_ids = array();
+        foreach ($post_ids as $post_id) {
+            $response_id = get_post_meta($post_id, '_alchemer_response_id', true);
+            if ($response_id !== '') {
+                $response_ids[] = strval($response_id);
+            }
+        }
+
+        return array_values(array_unique($response_ids));
+    }
+
+    /**
+     * Save normalized review metadata.
+     *
+     * @param int $post_id Review post ID.
+     * @param array $review_data Prepared review data.
+     * @param array $state Review state values.
+     * @return void
+     */
+    private function save_review_meta($post_id, $review_data, $state = array()) {
+        $review_data = isset($review_data['data']) ? $review_data['data'] : $review_data;
+
+        $response_id = isset($review_data['response_id']) ? sanitize_text_field($review_data['response_id']) : '';
+        $reviewer_name = isset($review_data['reviewer_name']) ? sanitize_text_field($review_data['reviewer_name']) : __('Anonymous', 'alchemer-reviews');
+        $rating = isset($review_data['rating']) ? intval($review_data['rating']) : 0;
+        $review_date = isset($review_data['review_date']) ? sanitize_text_field($review_data['review_date']) : current_time('F j, Y');
+
+        update_post_meta($post_id, '_alchemer_response_id', $response_id);
+        update_post_meta($post_id, '_alchemer_reviewer_name', $reviewer_name);
+        update_post_meta($post_id, '_alchemer_rating', $rating);
+        update_post_meta($post_id, '_alchemer_review_date', $review_date);
+        update_post_meta($post_id, '_alchemer_reviewed', isset($state['reviewed']) ? $state['reviewed'] : '0');
+        update_post_meta($post_id, '_alchemer_review_decision', isset($state['decision']) ? $state['decision'] : 'pending');
+        update_post_meta($post_id, '_alchemer_manually_edited', isset($state['manual_protection']) ? $state['manual_protection'] : '0');
+    }
+
+    /**
+     * Process a single review decision, handling duplicates and skip overwrite.
+     *
+     * @param array $review_data Review data.
      * @param bool $accept Whether to accept the review
-     * @param bool $use_ai Whether to use the AI suggestion
+     * @param bool $edited Whether the importer content was edited before saving
      * @return array Result of processing
      */
-    public function process_review($review_data, $accept = false, $use_ai = false) {
+    public function process_review($review_data, $accept = false, $edited = false) {
         // Debug logging
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('=== Processing Review ===');
             error_log('Review Data: ' . print_r($review_data, true));
             error_log('Accept: ' . ($accept ? 'true' : 'false'));
-            error_log('Use AI: ' . ($use_ai ? 'true' : 'false'));
+            error_log('Edited during import: ' . ($edited ? 'true' : 'false'));
         }
 
         // Check if review data is valid
@@ -1047,19 +1341,16 @@ class Alchemer_Reviews_Importer {
         $content = isset($review_data['content']) ? wp_kses_post($review_data['content']) : '';
         $post_date = isset($review_data['post_date']) ? sanitize_text_field($review_data['post_date']) : current_time('mysql');
         $review_date = isset($review_data['review_date']) ? sanitize_text_field($review_data['review_date']) : current_time('F j, Y');
-        
-        // If using AI suggestion and it exists, use it as the content
-        if ($use_ai && isset($review_data['ai_analysis']['suggestion'])) {
-            $content = wp_kses_post($review_data['ai_analysis']['suggestion']);
-        }
+        $decision = $accept ? 'accepted' : 'rejected';
+        $manual_protection = $edited ? '1' : '0';
         
         // Validate required fields
         if (empty($response_id) || empty($content)) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Missing required fields. Response ID: ' . $response_id . ', Content: ' . $content);
             }
-                return array(
-                    'success' => false,
+            return array(
+                'success' => false,
                 'message' => __('Missing required fields', 'alchemer-reviews')
             );
         }
@@ -1087,22 +1378,22 @@ class Alchemer_Reviews_Importer {
                 'post_status' => $accept ? 'publish' : 'draft',
                 'post_date' => $post_date,
             );
-            wp_update_post($post_data);
-            
-            // Update meta data
-            update_post_meta($post_id, '_alchemer_response_id', $response_id);
-            update_post_meta($post_id, '_alchemer_reviewer_name', $reviewer_name);
-            update_post_meta($post_id, '_alchemer_rating', $rating);
-            update_post_meta($post_id, '_alchemer_review_date', $review_date);
-            
-            // Only update AI analysis if it exists
-            if (isset($review_data['ai_analysis'])) {
-                $ai_analysis = $review_data['ai_analysis'];
-                update_post_meta($post_id, 'ai_sentiment', isset($ai_analysis['sentiment']) ? sanitize_text_field($ai_analysis['sentiment']) : 'Unknown');
-                update_post_meta($post_id, 'ai_suggestion', isset($ai_analysis['suggestion']) ? wp_kses_post($ai_analysis['suggestion']) : $content);
+            $update_result = wp_update_post($post_data, true);
+
+            if (is_wp_error($update_result)) {
+                return array(
+                    'success' => false,
+                    'message' => $update_result->get_error_message()
+                );
             }
             
-            update_post_meta($post_id, '_alchemer_manually_edited', '0');
+            $review_data['review_date'] = $review_date;
+            $this->save_review_meta($post_id, $review_data, array(
+                'reviewed' => '1',
+                'decision' => $decision,
+                'manual_protection' => $manual_protection,
+            ));
+
             return array(
                 'success' => true,
                 'post_id' => $post_id,
@@ -1136,15 +1427,13 @@ class Alchemer_Reviews_Importer {
             );
         }
         
-        // Save meta data
-        update_post_meta($post_id, '_alchemer_response_id', $response_id);
-        update_post_meta($post_id, '_alchemer_reviewer_name', $reviewer_name);
-        update_post_meta($post_id, '_alchemer_rating', $rating);
-        update_post_meta($post_id, '_alchemer_review_date', $review_date);
-        
-        
-        
-        update_post_meta($post_id, '_alchemer_manually_edited', '0');
+        $review_data['review_date'] = $review_date;
+        $this->save_review_meta($post_id, $review_data, array(
+            'reviewed' => '1',
+            'decision' => $decision,
+            'manual_protection' => $manual_protection,
+        ));
+
         return array(
             'success' => true,
             'post_id' => $post_id,
@@ -1197,16 +1486,132 @@ class Alchemer_Reviews_Importer {
     }
 
     /**
-     * Placeholder for future AI integration
+     * Resolve the rating/comment question from a response.
      *
-     * @param string $content The review content
-     * @return array [ 'sentiment' => 'Unknown', 'suggestion' => string ]
+     * @param array $survey_data Survey data.
+     * @param string $preferred_question_id Saved field mapping.
+     * @return array|null Resolved question with id and question data.
      */
-    public function get_review_analysis($content) {
-        return array(
-            'sentiment' => 'Unknown',
-            'suggestion' => $content
+    private function resolve_review_question($survey_data, $preferred_question_id = '') {
+        $preferred_question = $this->find_question_by_id($survey_data, $preferred_question_id);
+
+        if ($preferred_question && $this->extract_rating_value_from_question($preferred_question['question']) > 0 && $this->get_content_from_question($preferred_question['question']) !== '') {
+            return $preferred_question;
+        }
+
+        foreach ($survey_data as $key => $question) {
+            if (!is_array($question)) {
+                continue;
+            }
+
+            if ($this->is_review_question_candidate($question) && $this->extract_rating_value_from_question($question) > 0 && $this->get_content_from_question($question) !== '') {
+                return array(
+                    'id' => $key,
+                    'question' => $question,
+                );
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Check whether a question looks like the overall review/testimonial question.
+     *
+     * @param array $question Question data.
+     * @return bool True when this question should be used as review content.
+     */
+    private function is_review_question_candidate($question) {
+        $question_text = isset($question['question']) ? strtolower(trim(strip_tags((string) $question['question']))) : '';
+
+        if ($question_text === '') {
+            return false;
+        }
+
+        $review_keywords = array(
+            'overall experience',
+            'review',
+            'testimonial',
         );
+
+        foreach ($review_keywords as $keyword) {
+            if (strpos($question_text, $keyword) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Find a question by Alchemer question ID.
+     *
+     * @param array $survey_data Survey data.
+     * @param string $question_id Question ID.
+     * @return array|null Resolved question.
+     */
+    private function find_question_by_id($survey_data, $question_id) {
+        if ($question_id === '') {
+            return null;
+        }
+
+        if (isset($survey_data[$question_id]) && is_array($survey_data[$question_id])) {
+            return array(
+                'id' => $question_id,
+                'question' => $survey_data[$question_id],
+            );
+        }
+
+        foreach ($survey_data as $key => $question) {
+            if ((strval($key) === strval($question_id) || strval($key) === 'question' . strval($question_id)) && is_array($question)) {
+                return array(
+                    'id' => $key,
+                    'question' => $question,
+                );
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract a rating value from a question.
+     *
+     * @param array $question Question data.
+     * @return int Rating value.
+     */
+    private function extract_rating_value_from_question($question) {
+        if (isset($question['answer']) && is_numeric($question['answer'])) {
+            $rating = intval($question['answer']);
+            return ($rating >= 1 && $rating <= 5) ? $rating : 0;
+        }
+
+        if (isset($question['answer_id']) && is_numeric($question['answer_id'])) {
+            $rating = intval($question['answer_id']);
+            return ($rating >= 1 && $rating <= 5) ? $rating : 0;
+        }
+
+        $rating = isset($question['answer']) && is_numeric($question['answer']) ? intval($question['answer']) : 0;
+
+        return ($rating >= 1 && $rating <= 5) ? $rating : 0;
+    }
+
+    /**
+     * Get review content from a question.
+     *
+     * @param array $question Question data.
+     * @return string Review content.
+     */
+    private function get_content_from_question($question) {
+        if (isset($question['comments']) && trim((string) $question['comments']) !== '') {
+            return trim((string) $question['comments']);
+        }
+
+        if (isset($question['comment']) && trim((string) $question['comment']) !== '') {
+            return trim((string) $question['comment']);
+        }
+
+        return '';
     }
 
     /**
@@ -1250,4 +1655,4 @@ class Alchemer_Reviews_Importer {
         $mappings = get_option('alchemer_reviews_field_mappings', $this->default_field_mappings);
         return wp_parse_args($mappings, $this->default_field_mappings);
     }
-} 
+}

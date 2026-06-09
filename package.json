@@ -1,6 +1,6 @@
 {
   "name": "alchemer-reviews",
-  "version": "1.0.5",
+  "version": "1.0.16",
   "description": "A plugin to import and manage Alchemer survey responses as reviews in WordPress",
   "main": "gulpfile.js",
   "scripts": {
@@ -26,4 +26,4 @@
     "del": "^6.0.0",
     "run-sequence": "^2.2.1"
   }
-} 
+}

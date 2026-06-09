@@ -167,4 +167,67 @@ input:checked + .alchemer-toggle-slider:before {
     margin-bottom: 15px;
 }
 
- 
+/* Review Details Meta Box */
+#alchemer_review_details .inside {
+    overflow: visible;
+}
+
+.alchemer-review-details-fields {
+    display: grid;
+    gap: 12px;
+}
+
+.alchemer-review-field {
+    display: block;
+    min-width: 0;
+}
+
+.alchemer-review-field label,
+.alchemer-review-field-label {
+    display: block;
+    margin: 0 0 4px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.alchemer-review-field input[type="text"],
+.alchemer-review-field select {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-height: 34px;
+    box-sizing: border-box;
+}
+
+.alchemer-rating-display {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    line-height: 1.4;
+}
+
+.alchemer-rating-display .dashicons {
+    flex: 0 0 auto;
+}
+
+.alchemer-rating-display .rating-text {
+    margin-left: 4px;
+    white-space: nowrap;
+}
+
+.alchemer-review-inline-meta span:last-child {
+    overflow-wrap: anywhere;
+}
+
+.alchemer-review-checkbox-label {
+    display: flex !important;
+    align-items: flex-start;
+    gap: 6px;
+    font-weight: 400 !important;
+}
+
+.alchemer-review-checkbox-label input {
+    flex: 0 0 auto;
+    margin-top: 2px;
+}

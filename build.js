@@ -46,9 +46,6 @@ const filesToInclude = [
     'alchemer-reviews.php',
     'includes/**/*',
     'assets/**/*',
-    'vendor/**/*.php',
-    'vendor/**/*.json',
-    'vendor/autoload.php',
     'README.md',
     'LICENSE.txt'
 ];
@@ -60,6 +57,7 @@ const excludePatterns = [
     '.gitignore',
     'build/**',
     'dist/**',
+    'tests/**',
     'build.js',
     'gulpfile.js',
     'package.json',
@@ -67,6 +65,7 @@ const excludePatterns = [
     'composer.json',
     'composer.lock',
     'composer.phar',
+    'vendor/**',
     '.DS_Store',
     'assets/css/**/*.scss', // Exclude SCSS source files
     'assets/js/**/*.src.js', // Exclude source JS files
@@ -155,4 +154,4 @@ archive.finalize();
 output.on('close', function() {
     console.log(`\nPackage created successfully: ${outputFilePath}`);
     console.log(`Total size: ${(archive.pointer() / 1024 / 1024).toFixed(2)} MB`);
-}); 
+});

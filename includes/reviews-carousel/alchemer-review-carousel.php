@@ -73,8 +73,6 @@ class Alchemer_Review_Carousel {
             );
         }
 
-        error_log('Reviews: ' . print_r($reviews, true));
-        
         return $formatted_reviews;
     }
     
@@ -138,6 +136,10 @@ class Alchemer_Review_Carousel {
         $center_mode = filter_var($atts['center_mode'], FILTER_VALIDATE_BOOLEAN);
         
         $reviews = $this->get_reviews($atts['count'], $demo);
+
+        if (empty($reviews)) {
+            return '';
+        }
         
         // Ensure we have at least 3 reviews for the carousel
         if (count($reviews) < 3) {

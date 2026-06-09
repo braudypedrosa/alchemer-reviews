@@ -45,7 +45,7 @@ class Alchemer_Reviews_API {
         $this->api_token = $api_token;
         $this->api_token_secret = $api_token_secret;
         $this->survey_id = $survey_id;
-        
+
         // If no credentials provided, try to get them from settings
         if ( empty( $this->api_token ) || empty( $this->api_token_secret ) || empty( $this->survey_id ) ) {
             $this->load_credentials_from_settings();
@@ -98,7 +98,7 @@ class Alchemer_Reviews_API {
         }
         
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            error_log( 'Built API URL: ' . $url );
+            error_log( 'Built Alchemer API URL for endpoint: ' . $endpoint );
         }
         
         return $url;
@@ -118,17 +118,11 @@ class Alchemer_Reviews_API {
             );
         }
         
-        // Log credentials for debugging (only in test environments)
-        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            error_log( 'Alchemer API test connection - API Token: ' . substr($this->api_token, 0, 10) . '...' );
-            error_log( 'Alchemer API test connection - API Secret: ' . substr( $this->api_token_secret, 0, 5 ) . '...' );
-        }
-        
         // First, try to get the account details to verify API connectivity
         $url = $this->build_api_url( 'account' );
         
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            error_log( 'Testing API URL: ' . $url );
+            error_log( 'Testing Alchemer account endpoint.' );
         }
         
         // Make the request
@@ -199,7 +193,7 @@ class Alchemer_Reviews_API {
         $url = $this->build_api_url( 'survey/' . $this->survey_id );
         
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            error_log( 'Testing survey access URL: ' . $url );
+            error_log( 'Testing Alchemer survey access endpoint.' );
         }
         
         // Make the request
@@ -268,7 +262,7 @@ class Alchemer_Reviews_API {
         ));
         
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            error_log( 'Testing fallback API URL: ' . $url );
+            error_log( 'Testing Alchemer survey responses fallback endpoint.' );
         }
         
         // Make the request
@@ -465,7 +459,7 @@ class Alchemer_Reviews_API {
         $url = $this->build_api_url( 'survey/' . $this->survey_id . '/surveyresponse', $params );
         
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            error_log( 'Fetching survey responses with URL: ' . $url );
+            error_log( 'Fetching Alchemer survey responses page ' . $page . '.' );
         }
         
         // Make the request
@@ -528,11 +522,12 @@ class Alchemer_Reviews_API {
      * Get filtered survey responses with recursive pagination to match criteria
      * 
      * @param array $args Filter arguments
-     * @param int $max_reviews Maximum number of reviews to fetch
+     * @param int $max_reviews Maximum number of reviews to fetch. Use 0 or lower to fetch all new matching responses.
      * @param int $target_rating Specific rating to filter by (1-5)
+     * @param array $exclude_response_ids Response IDs already present in WordPress
      * @return array Response with success status, message and data
      */
-    public function get_filtered_responses($args = array(), $max_reviews = 20, $target_rating = 0) {
+    public function get_filtered_responses($args = array(), $max_reviews = 20, $target_rating = 0, $exclude_response_ids = array()) {
         // Default arguments - DO NOT set max_reviews as resultsperpage
         $default_args = array(
             'page' => 1,
@@ -543,36 +538,38 @@ class Alchemer_Reviews_API {
         
         // Merge with provided arguments
         $args = wp_parse_args($args, $default_args);
+        $stop_at_existing = !empty($args['stop_at_existing']);
+        unset($args['stop_at_existing']);
         
-        // Maximum reviews defaults to 20 if invalid
-        $max_reviews = max(1, intval($max_reviews));
-        // Cap at reasonable maximum
-        $max_reviews = min(100, $max_reviews);
+        $requested_max_reviews = intval($max_reviews);
+        $import_all_new = $requested_max_reviews <= 0;
+
+        if ($import_all_new) {
+            $max_reviews = 0;
+        } else {
+            // Cap fixed-size imports at a reasonable maximum.
+            $max_reviews = min(100, max(1, $requested_max_reviews));
+        }
         
         // Get rating question field mapping to use for filtering
         $field_mappings = get_option('alchemer_reviews_field_mappings', array());
         $rating_question_id = !empty($field_mappings['rating_question']) ? $field_mappings['rating_question'] : '';
+
+        $exclude_response_ids = array_filter(array_map('strval', (array) $exclude_response_ids));
+        $excluded_response_lookup = array_fill_keys($exclude_response_ids, true);
         
         // Debug summary at the start
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log("===== FILTERED RESPONSE SEARCH STARTED =====");
-            error_log("Target: EXACTLY {$max_reviews} valid reviews with rating {$target_rating}");
+            $target_description = $import_all_new ? 'ALL new valid reviews' : "EXACTLY {$max_reviews} valid reviews";
+            error_log("Target: {$target_description} with rating {$target_rating}");
             error_log("Rating question ID: {$rating_question_id}");
             error_log("Results per page: {$args['resultsperpage']}");
             error_log("Will check for both correct rating AND non-empty content");
         }
         
-        // If we have a specific rating to filter by and have the rating question ID
-        if ($target_rating > 0 && !empty($rating_question_id)) {
-            // Add filter for the rating question using Alchemer's exact syntax:
-            // https://apihelp.alchemer.com/help/filters-v5
-            $args['filter[field][0]'] = "[question({$rating_question_id})]";
-            $args['filter[operator][0]'] = "="; // Use equality operator
-            $args['filter[value][0]'] = strval($target_rating); // Convert to string for API
-
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("API Filter applied: filter[field][0]=[question({$rating_question_id})]&filter[operator][0]==&filter[value][0]={$target_rating}");
-            }
+        if ($target_rating > 0 && defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Rating filter {$target_rating} will be applied locally after resolving the review question.");
         }
         
         // Initialize collection of valid responses
@@ -581,9 +578,11 @@ class Alchemer_Reviews_API {
         $max_pages = 50; // Safety limit to prevent infinite loops - increased to handle more pagination
         $skipped_no_content = 0;
         $skipped_wrong_rating = 0;
+        $skipped_existing = 0;
+        $reached_existing_boundary = false;
         
-        // Continue paginating until we have EXACTLY the requested number of valid reviews or reach the end
-        while (count($valid_responses) < $max_reviews && $current_page <= $max_pages) {
+        // Continue paginating until we have the requested number of valid reviews or reach the end.
+        while (($import_all_new || count($valid_responses) < $max_reviews) && !$reached_existing_boundary && $current_page <= $max_pages) {
             // Set current page in args
             $args['page'] = $current_page;
             
@@ -617,13 +616,14 @@ class Alchemer_Reviews_API {
             // Process each response and verify it has BOTH the correct rating AND non-empty content
             $valid_page_responses = 0;
             foreach ($response['data'] as $response_item) {
-                // Skip if we already have enough valid responses
-                if (count($valid_responses) >= $max_reviews) {
+                // Skip if we already have enough valid responses for a fixed-size import.
+                if (!$import_all_new && count($valid_responses) >= $max_reviews) {
                     break;
                 }
                 
                 $is_valid = true;
-                
+                $response_id = isset($response_item['id']) ? strval($response_item['id']) : '';
+
                 // Verify rating if we're filtering by rating
                 if ($target_rating > 0 && !empty($rating_question_id)) {
                     $actual_rating = $this->extract_rating_from_response($response_item, $rating_question_id);
@@ -651,19 +651,43 @@ class Alchemer_Reviews_API {
                         $skipped_no_content++;
                     }
                 }
+
+                if ($is_valid && $response_id !== '' && isset($excluded_response_lookup[$response_id])) {
+                    if (defined('WP_DEBUG') && WP_DEBUG) {
+                        error_log("Response {$response_id} already exists in WordPress. Skipping.");
+                    }
+                    $skipped_existing++;
+
+                    if ($stop_at_existing) {
+                        $reached_existing_boundary = true;
+                        if (defined('WP_DEBUG') && WP_DEBUG) {
+                            error_log("Reached existing response boundary at response {$response_id}; stopping daily sync pagination.");
+                        }
+                        break;
+                    }
+
+                    continue;
+                }
                 
                 // Add to valid responses if it passes our checks
                 if ($is_valid) {
                     $valid_responses[] = $response_item;
+                    if ($response_id !== '') {
+                        $excluded_response_lookup[$response_id] = true;
+                    }
                     $valid_page_responses++;
                 }
             }
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log("Added {$valid_page_responses} valid responses from page {$current_page}");
-                error_log("Total valid responses so far: " . count($valid_responses) . " of {$max_reviews} requested");
-                error_log("Skipped on this page: " . ($skipped_wrong_rating + $skipped_no_content) . 
-                         " (" . $skipped_wrong_rating . " wrong rating, " . $skipped_no_content . " no content)");
+                if ($import_all_new) {
+                    error_log("Total valid responses so far: " . count($valid_responses) . " (all-new import mode)");
+                } else {
+                    error_log("Total valid responses so far: " . count($valid_responses) . " of {$max_reviews} requested");
+                }
+                error_log("Skipped so far: " . ($skipped_wrong_rating + $skipped_no_content + $skipped_existing) .
+                         " (" . $skipped_wrong_rating . " wrong rating, " . $skipped_no_content . " no content, " . $skipped_existing . " existing)");
             }
             
             // Check if we've reached the last page of results
@@ -674,8 +698,8 @@ class Alchemer_Reviews_API {
                 break;
             }
             
-            // Check if we already have exactly the number of requested valid reviews
-            if (count($valid_responses) >= $max_reviews) {
+            // Check if we already have exactly the number of requested valid reviews.
+            if (!$import_all_new && count($valid_responses) >= $max_reviews) {
                 if (defined('WP_DEBUG') && WP_DEBUG) {
                     error_log("Collected exactly {$max_reviews} valid reviews, stopping pagination");
                 }
@@ -686,8 +710,8 @@ class Alchemer_Reviews_API {
             $current_page++;
         }
         
-        // Trim to exact number if we somehow got more
-        if (count($valid_responses) > $max_reviews) {
+        // Trim to exact number if we somehow got more during a fixed-size import.
+        if (!$import_all_new && count($valid_responses) > $max_reviews) {
             $valid_responses = array_slice($valid_responses, 0, $max_reviews);
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -702,10 +726,13 @@ class Alchemer_Reviews_API {
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log("===== SEARCH COMPLETE =====");
             error_log("Found {$valid_count} valid reviews" . ($target_rating > 0 ? " with rating {$target_rating}" : ""));
-            error_log("Pages fetched: {$pages_fetched}");
-            error_log("Total skipped: " . ($skipped_wrong_rating + $skipped_no_content) . 
-                     " (" . $skipped_wrong_rating . " wrong rating, " . $skipped_no_content . " no content)");
-            if ($valid_count < $max_reviews) {
+                error_log("Pages fetched: {$pages_fetched}");
+                if ($reached_existing_boundary) {
+                    error_log("Stopped at existing response boundary.");
+                }
+                error_log("Total skipped: " . ($skipped_wrong_rating + $skipped_no_content + $skipped_existing) .
+                     " (" . $skipped_wrong_rating . " wrong rating, " . $skipped_no_content . " no content, " . $skipped_existing . " existing)");
+            if (!$import_all_new && $valid_count < $max_reviews) {
                 error_log("Found fewer valid reviews than requested ({$valid_count} < {$max_reviews})");
                 error_log("This likely means there aren't {$max_reviews} reviews with rating {$target_rating} and valid content available");
             }
@@ -733,7 +760,7 @@ class Alchemer_Reviews_API {
         }
         
         // Add note if we couldn't find enough reviews
-        if ($valid_count < $max_reviews) {
+        if (!$import_all_new && $valid_count < $max_reviews) {
             $message .= ' ' . sprintf(
                 __('(Note: Requested %d reviews but only found %d matching the criteria)', 'alchemer-reviews'),
                 $max_reviews,
@@ -748,6 +775,13 @@ class Alchemer_Reviews_API {
                 $skipped_no_content
             );
         }
+
+        if ($skipped_existing > 0) {
+            $message .= ' ' . sprintf(
+                __('(Skipped %d reviews already in WordPress)', 'alchemer-reviews'),
+                $skipped_existing
+            );
+        }
         
         return array(
             'success' => true,
@@ -756,9 +790,12 @@ class Alchemer_Reviews_API {
             'total' => $valid_count,
             'pages_fetched' => $pages_fetched,
             'max_reviews' => $max_reviews,
+            'import_all_new' => $import_all_new,
             'target_rating' => $target_rating,
             'skipped_no_content' => $skipped_no_content,
-            'skipped_wrong_rating' => $skipped_wrong_rating
+            'skipped_wrong_rating' => $skipped_wrong_rating,
+            'skipped_existing' => $skipped_existing,
+            'reached_existing_boundary' => $reached_existing_boundary
         );
     }
     
@@ -770,13 +807,7 @@ class Alchemer_Reviews_API {
      * @return int Rating value (0-5)
      */
     private function extract_rating_from_response($response, $rating_question_id) {
-        // Check if the response data is in the expected format
-        if (!isset($response['survey_data']) && is_array($response)) {
-            // It might be directly in the response array
-            $survey_data = $response;
-        } else {
-            $survey_data = isset($response['survey_data']) ? $response['survey_data'] : array();
-        }
+        $survey_data = $this->get_survey_data($response);
         
         // Debug
         if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -788,32 +819,16 @@ class Alchemer_Reviews_API {
             }
         }
         
-        // Check if the rating question exists in the survey data
-        if (!isset($survey_data[$rating_question_id])) {
-            // Try alternate formats - sometimes the question ID might be a string or have a prefix
-            foreach ($survey_data as $key => $value) {
-                if (strval($key) === strval($rating_question_id) || 
-                    strval($key) === 'question' . strval($rating_question_id)) {
-                    $rating_question = $value;
-                    
-                    if (defined('WP_DEBUG') && WP_DEBUG) {
-                        error_log('Found rating question under alternate key: ' . $key);
-                    }
-                    
-                    return $this->parse_rating_value($rating_question);
-                }
-            }
-            
+        $rating_question = $this->resolve_review_question($survey_data, $rating_question_id);
+
+        if (!$rating_question) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Rating question not found in response data. Available keys: ' . implode(', ', array_keys($survey_data)));
             }
             
             return 0;
         }
-        
-        // Get the rating question data
-        $rating_question = $survey_data[$rating_question_id];
-        
+
         return $this->parse_rating_value($rating_question);
     }
     
@@ -968,8 +983,8 @@ class Alchemer_Reviews_API {
             }
         }
         
-        // Validate rating (most rating scales are 1-5 or 1-10)
-        if ($rating < 0) {
+        // Only star ratings from 1-5 are valid review ratings.
+        if ($rating < 1 || $rating > 5) {
             $rating = 0;
         }
         
@@ -989,13 +1004,7 @@ class Alchemer_Reviews_API {
      * @return bool True if there is content, false otherwise
      */
     private function response_has_content($response, $rating_question_id) {
-        // Check if the response data is in the expected format
-        if (!isset($response['survey_data']) && is_array($response)) {
-            // It might be directly in the response array
-            $survey_data = $response;
-        } else {
-            $survey_data = isset($response['survey_data']) ? $response['survey_data'] : array();
-        }
+        $survey_data = $this->get_survey_data($response);
         
         // Debug
         if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -1004,23 +1013,107 @@ class Alchemer_Reviews_API {
             }
         }
         
-        // Check if the rating question exists in the survey data
-        if (!isset($survey_data[$rating_question_id])) {
-            // Try alternate formats - sometimes the question ID might be a string or have a prefix
-            foreach ($survey_data as $key => $value) {
-                if (strval($key) === strval($rating_question_id) || 
-                    strval($key) === 'question' . strval($rating_question_id)) {
-                    return $this->extract_content_from_question($value);
-                }
-            }
-            
+        $rating_question = $this->resolve_review_question($survey_data, $rating_question_id);
+
+        if (!$rating_question) {
             return false;
         }
-        
-        // Get the rating question data
-        $rating_question = $survey_data[$rating_question_id];
-        
+
         return $this->extract_content_from_question($rating_question);
+    }
+
+    /**
+     * Get survey data from a response.
+     *
+     * @param array $response Survey response.
+     * @return array Survey data.
+     */
+    private function get_survey_data($response) {
+        if (!isset($response['survey_data']) && is_array($response)) {
+            return $response;
+        }
+
+        return isset($response['survey_data']) && is_array($response['survey_data']) ? $response['survey_data'] : array();
+    }
+
+    /**
+     * Resolve the review question even if the saved mapping is stale.
+     *
+     * @param array $survey_data Survey data.
+     * @param string $preferred_question_id Saved mapped question ID.
+     * @return array|null Question data.
+     */
+    private function resolve_review_question($survey_data, $preferred_question_id = '') {
+        $preferred_question = $this->find_question_by_id($survey_data, $preferred_question_id);
+
+        if ($preferred_question && $this->parse_rating_value($preferred_question) > 0 && $this->get_content_from_question($preferred_question) !== '') {
+            return $preferred_question;
+        }
+
+        foreach ($survey_data as $question) {
+            if (!is_array($question)) {
+                continue;
+            }
+
+            if ($this->is_review_question_candidate($question) && $this->parse_rating_value($question) > 0 && $this->get_content_from_question($question) !== '') {
+                return $question;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Check whether a question looks like the overall review/testimonial question.
+     *
+     * @param array $question Question data.
+     * @return bool True when this question should be used as review content.
+     */
+    private function is_review_question_candidate($question) {
+        $question_text = isset($question['question']) ? strtolower(trim(strip_tags((string) $question['question']))) : '';
+
+        if ($question_text === '') {
+            return false;
+        }
+
+        $review_keywords = array(
+            'overall experience',
+            'review',
+            'testimonial',
+        );
+
+        foreach ($review_keywords as $keyword) {
+            if (strpos($question_text, $keyword) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Find a question by its Alchemer ID.
+     *
+     * @param array $survey_data Survey data.
+     * @param string $question_id Question ID.
+     * @return array|null Question data.
+     */
+    private function find_question_by_id($survey_data, $question_id) {
+        if ($question_id === '') {
+            return null;
+        }
+
+        if (isset($survey_data[$question_id]) && is_array($survey_data[$question_id])) {
+            return $survey_data[$question_id];
+        }
+
+        foreach ($survey_data as $key => $value) {
+            if ((strval($key) === strval($question_id) || strval($key) === 'question' . strval($question_id)) && is_array($value)) {
+                return $value;
+            }
+        }
+
+        return null;
     }
     
     /**
@@ -1030,28 +1123,8 @@ class Alchemer_Reviews_API {
      * @return bool True if non-empty content was found
      */
     private function extract_content_from_question($rating_question) {
-        // Extract the review content from the comments
-        $content = '';
-        
-        if (isset($rating_question['comments'])) {
-            $content = $rating_question['comments'];
-        } elseif (isset($rating_question['comment'])) {
-            $content = $rating_question['comment'];
-        } elseif (isset($rating_question['custom_variable']) && !empty($rating_question['custom_variable'])) {
-            $content = $rating_question['custom_variable'];
-        }
-        
-        // If still no content, look for it in other possible fields
-        if (empty($content) && is_array($rating_question)) {
-            // Look for text fields that might contain review content
-            foreach ($rating_question as $key => $value) {
-                if (is_string($value) && strlen($value) > 10 && $key !== 'question') {
-                    $content = $value;
-                    break;
-                }
-            }
-        }
-        
+        $content = $this->get_content_from_question($rating_question);
+
         // Debug
         if (defined('WP_DEBUG') && WP_DEBUG) {
             if (empty($content)) {
@@ -1060,7 +1133,25 @@ class Alchemer_Reviews_API {
                 error_log('Found content: ' . substr($content, 0, 30) . (strlen($content) > 30 ? '...' : ''));
             }
         }
-        
+
         return !empty($content);
     }
-} 
+
+    /**
+     * Get review content from a question.
+     *
+     * @param mixed $rating_question The question data.
+     * @return string Review content.
+     */
+    private function get_content_from_question($rating_question) {
+        $content = '';
+
+        if (isset($rating_question['comments'])) {
+            $content = $rating_question['comments'];
+        } elseif (isset($rating_question['comment'])) {
+            $content = $rating_question['comment'];
+        }
+
+        return trim((string) $content);
+    }
+}

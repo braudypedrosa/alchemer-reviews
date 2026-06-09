@@ -137,46 +137,54 @@ class Alchemer_Reviews_Post_Types {
         $reviewer_name = get_post_meta( $post->ID, '_alchemer_reviewer_name', true );
         $rating = get_post_meta( $post->ID, '_alchemer_rating', true );
         $skip_overwrite = get_post_meta( $post->ID, '_alchemer_manually_edited', true );
+        $reviewed = get_post_meta( $post->ID, '_alchemer_reviewed', true );
+        $review_decision = get_post_meta( $post->ID, '_alchemer_review_decision', true );
         
         // Get response ID
         $response_id = get_post_meta( $post->ID, '_alchemer_response_id', true );
         
-        // Output fields
         ?>
-        <p>
-            <label for="alchemer_reviewer_name"><?php _e( 'Reviewer Name:', 'alchemer-reviews' ); ?></label>
-            <input type="text" id="alchemer_reviewer_name" name="alchemer_reviewer_name" value="<?php echo esc_attr( $reviewer_name ); ?>" class="widefat">
-        </p>
-        
-        <p>
-            <label for="alchemer_rating"><?php _e( 'Rating:', 'alchemer-reviews' ); ?></label>
-            <select id="alchemer_rating" name="alchemer_rating" class="widefat">
-                <option value="0" <?php selected( $rating, 0 ); ?>><?php _e( 'No rating', 'alchemer-reviews' ); ?></option>
-                <option value="1" <?php selected( $rating, 1 ); ?>>1 - <?php _e( 'Poor', 'alchemer-reviews' ); ?></option>
-                <option value="2" <?php selected( $rating, 2 ); ?>>2 - <?php _e( 'Fair', 'alchemer-reviews' ); ?></option>
-                <option value="3" <?php selected( $rating, 3 ); ?>>3 - <?php _e( 'Average', 'alchemer-reviews' ); ?></option>
-                <option value="4" <?php selected( $rating, 4 ); ?>>4 - <?php _e( 'Good', 'alchemer-reviews' ); ?></option>
-                <option value="5" <?php selected( $rating, 5 ); ?>>5 - <?php _e( 'Excellent', 'alchemer-reviews' ); ?></option>
-            </select>
-        </p>
-        
-        <div class="rating-display">
-            <?php echo $this->get_rating_stars( $rating ); ?>
+        <div class="alchemer-review-details-fields">
+            <div class="alchemer-review-field">
+                <label for="alchemer_reviewer_name"><?php _e( 'Reviewer Name:', 'alchemer-reviews' ); ?></label>
+                <input type="text" id="alchemer_reviewer_name" name="alchemer_reviewer_name" value="<?php echo esc_attr( $reviewer_name ); ?>" class="widefat">
+            </div>
+
+            <div class="alchemer-review-field">
+                <label for="alchemer_rating"><?php _e( 'Rating:', 'alchemer-reviews' ); ?></label>
+                <select id="alchemer_rating" name="alchemer_rating" class="widefat">
+                    <option value="0" <?php selected( $rating, 0 ); ?>><?php _e( 'No rating', 'alchemer-reviews' ); ?></option>
+                    <option value="1" <?php selected( $rating, 1 ); ?>>1 - <?php _e( 'Poor', 'alchemer-reviews' ); ?></option>
+                    <option value="2" <?php selected( $rating, 2 ); ?>>2 - <?php _e( 'Fair', 'alchemer-reviews' ); ?></option>
+                    <option value="3" <?php selected( $rating, 3 ); ?>>3 - <?php _e( 'Average', 'alchemer-reviews' ); ?></option>
+                    <option value="4" <?php selected( $rating, 4 ); ?>>4 - <?php _e( 'Good', 'alchemer-reviews' ); ?></option>
+                    <option value="5" <?php selected( $rating, 5 ); ?>>5 - <?php _e( 'Excellent', 'alchemer-reviews' ); ?></option>
+                </select>
+            </div>
+
+            <div class="alchemer-review-field alchemer-rating-display">
+                <?php echo $this->get_rating_stars( $rating ); ?>
+            </div>
+
+            <div class="alchemer-review-field alchemer-review-inline-meta">
+                <span class="alchemer-review-field-label"><?php _e( 'Import Status:', 'alchemer-reviews' ); ?></span>
+                <span><?php echo esc_html( $this->get_review_decision_label( $review_decision, $reviewed ) ); ?></span>
+            </div>
+
+            <div class="alchemer-review-field">
+                <label class="alchemer-review-checkbox-label">
+                    <input type="checkbox" name="alchemer_manually_edited" value="1" <?php checked( $skip_overwrite, '1' ); ?>>
+                    <span><?php _e( 'Skip Overwrite (protect from updates during imports)', 'alchemer-reviews' ); ?></span>
+                </label>
+            </div>
+
+            <?php if ( $response_id ) : ?>
+                <div class="alchemer-review-field alchemer-review-inline-meta">
+                    <span class="alchemer-review-field-label"><?php _e( 'Alchemer Response ID:', 'alchemer-reviews' ); ?></span>
+                    <span class="alchemer-response-id"><?php echo esc_html( $response_id ); ?></span>
+                </div>
+            <?php endif; ?>
         </div>
-        
-        <p>
-            <label>
-                <input type="checkbox" name="alchemer_manually_edited" value="1" <?php checked( $skip_overwrite, '1' ); ?>>
-                <?php _e( 'Skip Overwrite (protect from updates during imports)', 'alchemer-reviews' ); ?>
-            </label>
-        </p>
-        
-        <?php if ( $response_id ) : ?>
-            <p>
-                <label><?php _e( 'Alchemer Response ID:', 'alchemer-reviews' ); ?></label>
-                <span><?php echo esc_html( $response_id ); ?></span>
-            </p>
-        <?php endif; ?>
         <?php
     }
 
@@ -275,6 +283,7 @@ class Alchemer_Reviews_Post_Types {
             if ( $key === 'title' ) {
                 $new_columns['review_content'] = __( 'Review Content', 'alchemer-reviews' );
                 $new_columns['rating'] = __( 'Rating', 'alchemer-reviews' );
+                $new_columns['review_decision'] = __( 'Import Status', 'alchemer-reviews' );
                 $new_columns['skip_overwrite'] = __( 'Skip Overwrite', 'alchemer-reviews' );
                 $new_columns['actions'] = __( 'Actions', 'alchemer-reviews' );
             }
@@ -301,6 +310,12 @@ class Alchemer_Reviews_Post_Types {
             case 'rating':
                 $rating = get_post_meta( $post_id, '_alchemer_rating', true );
                 echo $this->get_rating_stars( $rating );
+                break;
+
+            case 'review_decision':
+                $reviewed = get_post_meta( $post_id, '_alchemer_reviewed', true );
+                $review_decision = get_post_meta( $post_id, '_alchemer_review_decision', true );
+                echo esc_html( $this->get_review_decision_label( $review_decision, $reviewed ) );
                 break;
                 
             case 'skip_overwrite':
@@ -338,6 +353,7 @@ class Alchemer_Reviews_Post_Types {
     public function make_review_columns_sortable( $columns ) {
         $columns['rating'] = 'rating';
         $columns['review_content'] = 'review_content';
+        $columns['review_decision'] = 'review_decision';
         $columns['skip_overwrite'] = 'manually_edited';
         
         return $columns;
@@ -365,12 +381,40 @@ class Alchemer_Reviews_Post_Types {
                 $query->set( 'meta_key', '_alchemer_rating' );
                 $query->set( 'orderby', 'meta_value_num' );
                 break;
+
+            case 'review_decision':
+                $query->set( 'meta_key', '_alchemer_review_decision' );
+                $query->set( 'orderby', 'meta_value' );
+                break;
                 
             case 'manually_edited':
                 $query->set( 'meta_key', '_alchemer_manually_edited' );
                 $query->set( 'orderby', 'meta_value' );
                 break;
         }
+    }
+
+    /**
+     * Get a readable label for the import review state.
+     *
+     * @param string $decision Review decision.
+     * @param string $reviewed Reviewed flag.
+     * @return string Readable label.
+     */
+    private function get_review_decision_label( $decision, $reviewed ) {
+        if ( $decision === 'accepted' ) {
+            return __( 'Accepted', 'alchemer-reviews' );
+        }
+
+        if ( $decision === 'rejected' ) {
+            return __( 'Rejected', 'alchemer-reviews' );
+        }
+
+        if ( $reviewed === '1' ) {
+            return __( 'Reviewed', 'alchemer-reviews' );
+        }
+
+        return __( 'Pending Review', 'alchemer-reviews' );
     }
 
     /**
@@ -412,12 +456,16 @@ class Alchemer_Reviews_Post_Types {
      * @return void
      */
     public function enqueue_admin_scripts( $hook ) {
-        // Only load on the reviews list page
-        if ( 'edit.php' !== $hook || 'alchemer-review' !== get_current_screen()->post_type ) {
+        $screen = get_current_screen();
+
+        if ( ! $screen || 'alchemer-review' !== $screen->post_type ) {
             return;
         }
-        
-        // Register and enqueue CSS
+
+        if ( ! in_array( $hook, array( 'edit.php', 'post.php', 'post-new.php' ), true ) ) {
+            return;
+        }
+
         wp_register_style(
             'alchemer-reviews-admin',
             ALCHEMER_REVIEWS_PLUGIN_URL . 'assets/css/admin.css',
@@ -425,6 +473,10 @@ class Alchemer_Reviews_Post_Types {
             ALCHEMER_REVIEWS_VERSION
         );
         wp_enqueue_style( 'alchemer-reviews-admin' );
+
+        if ( 'edit.php' !== $hook ) {
+            return;
+        }
 
         // Enqueue Tailwind and plugin button styles for the reviews list page
         $tailwind_url = 'https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css';
@@ -547,4 +599,4 @@ class Alchemer_Reviews_Post_Types {
     }
 
 
-} 
+}

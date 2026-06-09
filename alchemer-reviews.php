@@ -2,23 +2,11 @@
 /**
  * Plugin Name: Alchemer Reviews
  * Description: A plugin to import and manage Alchemer survey responses as reviews in WordPress.
- * Version: 1.0.5
+ * Version: 1.0.16
  * Author: Braudy Pedrosa
  * Text Domain: alchemer-reviews
  * Domain Path: /languages
  */
-
-// Load Composer autoload and .env for environment variables
-if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
-    require_once __DIR__ . '/vendor/autoload.php';
-    /**
-     * Load environment variables from .env file using vlucas/phpdotenv
-     *
-     * @since 1.0.3
-     */
-    $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
-    $dotenv->safeLoad();
-}
 
 // If this file is called directly, abort.
 if ( ! defined( 'WPINC' ) ) {
@@ -26,7 +14,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 // Define plugin constants
-define( 'ALCHEMER_REVIEWS_VERSION', '1.0.5' );
+define( 'ALCHEMER_REVIEWS_VERSION', '1.0.16' );
 define( 'ALCHEMER_REVIEWS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ALCHEMER_REVIEWS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -68,6 +56,8 @@ function alchemer_reviews_init() {
     // Initialize importer
     $importer = new Alchemer_Reviews_Importer();
     $importer->init();
+
+    alchemer_reviews_maybe_schedule_daily_import();
 }
 
 // Register activation hook
@@ -82,9 +72,28 @@ function alchemer_reviews_activate() {
     // Trigger post type registration
     $post_types = new Alchemer_Reviews_Post_Types();
     $post_types->register_review_post_type();
+
+    alchemer_reviews_maybe_schedule_daily_import();
     
     // Clear the permalinks
     flush_rewrite_rules();
+}
+
+/**
+ * Schedule the daily importer if the saved setting is enabled.
+ *
+ * @return void
+ */
+function alchemer_reviews_maybe_schedule_daily_import() {
+    $mappings = get_option( 'alchemer_reviews_field_mappings', array() );
+
+    if ( empty( $mappings['auto_import'] ) ) {
+        return;
+    }
+
+    if ( ! wp_next_scheduled( 'alchemer_reviews_daily_import' ) ) {
+        wp_schedule_event( time() + MINUTE_IN_SECONDS, 'daily', 'alchemer_reviews_daily_import' );
+    }
 }
 
 // Register deactivation hook
@@ -96,6 +105,8 @@ register_deactivation_hook( __FILE__, 'alchemer_reviews_deactivate' );
  * @return void
  */
 function alchemer_reviews_deactivate() {
+    wp_clear_scheduled_hook('alchemer_reviews_daily_import');
+
     // Clear the permalinks
     flush_rewrite_rules();
-} 
+}

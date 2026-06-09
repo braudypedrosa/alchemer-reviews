@@ -252,7 +252,7 @@ class Alchemer_Reviews_Settings {
     }
 
     /**
-     * Render the settings page with tabbed API testing (Alchemer & Gemini)
+     * Render the settings page with Alchemer API testing.
      *
      * @return void
      */
@@ -449,4 +449,4 @@ class Alchemer_Reviews_Settings {
         
         wp_enqueue_style('alchemer-tailwind-override');
     }
-} 
+}

@@ -3,8 +3,15 @@
  * 
  * Handles the Import Reviews functionality
  */
-(function($) {
+(function($, config) {
     'use strict';
+
+    if (!$ || !config || !config.ajaxUrl) {
+        return;
+    }
+
+    const ajaxErrorText = config.errorText || 'Error: ';
+    let importInProgress = false;
 
     // Toast notification system
     const Toast = {
@@ -62,8 +69,33 @@
     };
 
     $(document).ready(function() {
-        // Import Reviews button click handler
-        $('#import-alchemer-reviews').on('click', function() {
+        const importButton = document.getElementById('import-alchemer-reviews');
+        if (importButton) {
+            importButton.removeEventListener('click', handleImportButtonClick);
+            importButton.addEventListener('click', handleImportButtonClick);
+        }
+
+        // Keep delegated binding for late-rendered buttons.
+        $(document)
+            .off('click.alchemerReviewsImport', '#import-alchemer-reviews')
+            .on('click.alchemerReviewsImport', '#import-alchemer-reviews', handleImportButtonClick);
+
+        function handleImportButtonClick(event) {
+            const rawEvent = event && (event.originalEvent || event);
+            if (rawEvent && rawEvent.alchemerImportHandled) {
+                return;
+            }
+            if (rawEvent) {
+                rawEvent.alchemerImportHandled = true;
+            }
+
+            event.preventDefault();
+            if (importInProgress) {
+                return;
+            }
+
+            importInProgress = true;
+
             const $button = $(this);
             const $spinner = $('#import-spinner');
             const $result = $('#import-result');
@@ -98,11 +130,11 @@
             
             // Make AJAX request
             $.ajax({
-                url: alchemerReviewsImporter.ajaxUrl,
+                url: config.ajaxUrl,
                 type: 'POST',
                 data: {
                     action: 'import_alchemer_reviews',
-                    nonce: alchemerReviewsImporter.nonce,
+                    nonce: config.nonce,
                     max_reviews: maxReviews,
                     target_rating: targetRating
                 },
@@ -138,7 +170,7 @@
                         // Show reviews for approval after a short delay
                         setTimeout(function() {
                             try {
-                            showReviewsForApproval(response.data.reviews);
+                            showReviewsForApproval(response.data.reviews, response.data);
                             } catch (error) {
                                 console.error('Error showing reviews:', error);
                                 $result.html('<div class="alert alert-error">Error: Failed to display reviews. Please check the console for details.</div>');
@@ -152,19 +184,32 @@
                 error: function(xhr, status, error) {
                     clearInterval(progressInterval);
                     console.error('Import error:', error);
-                    $result.html('<div class="alert alert-error">' + alchemerReviewsImporter.errorText + 'Failed to import reviews. Please check the console for details.</div>');
+                    $result.html('<div class="alert alert-error">' + ajaxErrorText + 'Failed to import reviews. Please check the console for details.</div>');
                 },
                 complete: function() {
                     clearInterval(progressInterval);
+                    importInProgress = false;
                     $button.prop('disabled', false);
                     $spinner.addClass('hidden');
                 }
             });
-        });
+        }
         
         // Show reviews for approval
-        function showReviewsForApproval(reviews) {
+        function showReviewsForApproval(reviews, importData = {}) {
             const $result = $('#import-result');
+
+            if (!reviews.length) {
+                const message = $('<div>').text(importData.message || 'No matching Alchemer responses were available to import.').html();
+                $result.html(
+                    '<div class="alert alert-success">' +
+                    '<h4 class="text-lg font-medium mb-2">No reviews ready to import</h4>' +
+                    '<p>' + message + '</p>' +
+                    '</div>'
+                );
+                return;
+            }
+
             let html = '<div class="reviews-to-approve">';
             
             // Add header with a dedicated class for easy updates
@@ -180,7 +225,6 @@
                 }
 
                 const reviewData = review.review_data;
-                const aiAnalysis = reviewData.ai_analysis || { sentiment: 'Unknown', suggestion: reviewData.content };
                 const responseId = reviewData.response_id;
                 
                 html += '<div class="review-card mb-6 p-4 bg-white rounded-lg shadow" data-response-id="' + responseId + '">';
@@ -289,7 +333,7 @@
                             // Update review content
                             review.review_data.content = editedContent;
                             // Process with edited content
-                            processReview(responseId, review, true, false);
+                            processReview(responseId, review, true, true);
                             // Hide modal
                             hideModal();
                         } else {
@@ -318,7 +362,7 @@
         }
         
         // Process a single review
-        function processReview(responseId, review, accept, useAI = false) {
+        function processReview(responseId, review, accept, edited = false) {
             const $reviewCard = $('.review-card[data-response-id="' + responseId + '"]');
             const $button = accept ? $reviewCard.find('.accept-review') : $reviewCard.find('.reject-review');
             
@@ -339,14 +383,14 @@
             console.log('Sending review data:', reviewData);
             
             $.ajax({
-                url: alchemerReviewsImporter.ajaxUrl,
+                url: config.ajaxUrl,
                 type: 'POST',
                 data: {
                     action: 'process_alchemer_review',
-                    nonce: alchemerReviewsImporter.nonce,
+                    nonce: config.nonce,
                     review_data: reviewData,
                     accept: accept ? 1 : 0,
-                    use_ai: useAI ? 1 : 0
+                    edited: edited ? 1 : 0
                 },
                 success: function(response) {
                     if (response.success) {
@@ -405,4 +449,7 @@
         }
     });
 
-})(jQuery); 
+})(
+    typeof jQuery !== 'undefined' ? jQuery : window.jQuery,
+    typeof alchemerReviewsImporter !== 'undefined' ? alchemerReviewsImporter : (window.alchemerReviewsImporter || {})
+);
