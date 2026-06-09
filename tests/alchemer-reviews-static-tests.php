@@ -12,7 +12,7 @@ $files = array(
     'importer' => $plugin_dir . '/includes/class-alchemer-reviews-importer.php',
     'post_types' => $plugin_dir . '/includes/class-alchemer-reviews-post-types.php',
     'settings' => $plugin_dir . '/includes/class-alchemer-reviews-settings.php',
-    'updater' => $plugin_dir . '/includes/class-alchemer-reviews-github-updater.php',
+    'puc' => $plugin_dir . '/includes/plugin-update-checker/plugin-update-checker.php',
     'importer_js' => $plugin_dir . '/assets/js/importer.js',
     'carousel' => $plugin_dir . '/includes/reviews-carousel/alchemer-review-carousel.php',
 );
@@ -63,11 +63,11 @@ $checks = array(
     'testimonial carousel handles empty reviews' => strpos($source['carousel'], 'empty($reviews)') !== false,
     'API debug logs do not expose signed URLs' => strpos($source['api'], 'Built API URL: ' . '$url') === false && strpos($source['api'], 'Fetching survey responses with URL: ' . '$url') === false,
     'plugin declares GitHub update URI' => strpos($source['bootstrap'], 'Update URI: https://github.com/braudypedrosa/alchemer-reviews') !== false,
-    'bootstrap includes GitHub updater' => strpos($source['bootstrap'], 'class-alchemer-reviews-github-updater.php') !== false && strpos($source['bootstrap'], 'Alchemer_Reviews_GitHub_Updater') !== false,
-    'GitHub updater hooks WordPress update APIs' => strpos($source['updater'], 'pre_set_site_transient_update_plugins') !== false && strpos($source['updater'], 'plugins_api') !== false && strpos($source['updater'], 'upgrader_process_complete') !== false,
-    'GitHub updater fetches latest release' => strpos($source['updater'], 'api.github.com/repos/braudypedrosa/alchemer-reviews/releases/latest') !== false,
-    'GitHub updater prefers release zip asset' => strpos($source['updater'], 'browser_download_url') !== false && strpos($source['updater'], 'alchemer-reviews.zip') !== false,
-    'GitHub updater compares release tag version' => strpos($source['updater'], 'tag_name') !== false && strpos($source['updater'], 'version_compare') !== false && strpos($source['updater'], 'ALCHEMER_REVIEWS_VERSION') !== false,
+    'bootstrap includes Plugin Update Checker' => strpos($source['bootstrap'], 'plugin-update-checker/plugin-update-checker.php') !== false && strpos($source['bootstrap'], 'PucFactory::buildUpdateChecker') !== false,
+    'Plugin Update Checker library is vendored' => strpos($source['puc'], 'Plugin Update Checker Library 5.7') !== false && file_exists($plugin_dir . '/includes/plugin-update-checker/Puc/v5/PucFactory.php'),
+    'Plugin Update Checker points to GitHub repo' => strpos($source['bootstrap'], 'https://github.com/braudypedrosa/alchemer-reviews/') !== false,
+    'Plugin Update Checker uses release zip assets' => strpos($source['bootstrap'], 'enableReleaseAssets') !== false && strpos($source['bootstrap'], 'alchemer-reviews\.zip') !== false,
+    'custom GitHub updater was removed' => ! file_exists($plugin_dir . '/includes/class-alchemer-reviews-github-updater.php') && strpos($source['bootstrap'], 'Alchemer_Reviews_GitHub_Updater') === false,
     'release package builder adds each file once' => strpos($source['build'], 'addedFiles') !== false && strpos($source['build'], 'addFileToArchive') !== false && strpos($source['build'], "fs.readdirSync(sourceDir)") === false,
 );
 

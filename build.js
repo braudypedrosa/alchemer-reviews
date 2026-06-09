@@ -89,6 +89,22 @@ console.log(`Version: ${pluginVersion} (internal)`);
 
 // Helper function to check if a file should be excluded
 function shouldExclude(filePath) {
+    if (filePath.startsWith('includes/plugin-update-checker/vendor/')) {
+        return false;
+    }
+
+    if (
+        filePath.startsWith('includes/plugin-update-checker/build/') ||
+        filePath.startsWith('includes/plugin-update-checker/examples/') ||
+        filePath === 'includes/plugin-update-checker/.editorconfig' ||
+        filePath === 'includes/plugin-update-checker/.gitattributes' ||
+        filePath === 'includes/plugin-update-checker/.gitignore' ||
+        filePath === 'includes/plugin-update-checker/composer.json' ||
+        filePath === 'includes/plugin-update-checker/phpcs.xml'
+    ) {
+        return true;
+    }
+
     return excludePatterns.some(pattern => {
         const regexPattern = pattern
             .replace(/\./g, '\\.')

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Alchemer Reviews
  * Description: A plugin to import and manage Alchemer survey responses as reviews in WordPress.
- * Version: 1.0.17
+ * Version: 1.0.18
  * Author: Braudy Pedrosa
  * Text Domain: alchemer-reviews
  * Domain Path: /languages
@@ -15,7 +15,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 // Define plugin constants
-define( 'ALCHEMER_REVIEWS_VERSION', '1.0.17' );
+define( 'ALCHEMER_REVIEWS_VERSION', '1.0.18' );
 define( 'ALCHEMER_REVIEWS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ALCHEMER_REVIEWS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'ALCHEMER_REVIEWS_PLUGIN_FILE', __FILE__ );
@@ -34,8 +34,8 @@ require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-api.
 // Include the file that handles importing reviews
 require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-importer.php';
 
-// Include the file that handles GitHub release updates
-require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-github-updater.php';
+// Include the plugin update checker library
+require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/plugin-update-checker/plugin-update-checker.php';
 
 // Include dependencies
 require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/reviews-carousel/alchemer-review-carousel.php';
@@ -64,11 +64,29 @@ function alchemer_reviews_init() {
     $importer = new Alchemer_Reviews_Importer();
     $importer->init();
 
-    // Initialize GitHub release updater
-    $github_updater = new Alchemer_Reviews_GitHub_Updater( ALCHEMER_REVIEWS_PLUGIN_FILE );
-    $github_updater->init();
+    alchemer_reviews_init_github_updater();
 
     alchemer_reviews_maybe_schedule_daily_import();
+}
+
+/**
+ * Initialize GitHub release updates through Plugin Update Checker.
+ *
+ * @return void
+ */
+function alchemer_reviews_init_github_updater() {
+    if ( ! class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ) ) {
+        return;
+    }
+
+    $update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+        'https://github.com/braudypedrosa/alchemer-reviews/',
+        ALCHEMER_REVIEWS_PLUGIN_FILE,
+        'alchemer-reviews'
+    );
+
+    $update_checker->setBranch( 'master' );
+    $update_checker->getVcsApi()->enableReleaseAssets( '/alchemer-reviews\.zip($|[?&#])/i' );
 }
 
 // Register activation hook
