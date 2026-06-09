@@ -41,11 +41,11 @@ archive.on('error', function(err) {
 // Pipe archive data to the file
 archive.pipe(output);
 
-// Files to include
+// Files and directories to include
 const filesToInclude = [
     'alchemer-reviews.php',
-    'includes/**/*',
-    'assets/**/*',
+    'includes',
+    'assets',
     'README.md',
     'LICENSE.txt'
 ];
@@ -98,6 +98,19 @@ function shouldExclude(filePath) {
     });
 }
 
+const addedFiles = new Set();
+
+// Helper function to add a file to the archive once
+function addFileToArchive(fullPath, relativePath) {
+    if (addedFiles.has(relativePath)) {
+        return;
+    }
+
+    addedFiles.add(relativePath);
+    console.log(`Adding: ${relativePath}`);
+    archive.file(fullPath, { name: relativePath });
+}
+
 // Helper function to add a directory to the archive
 function addDirectoryToArchive(dirPath, baseDir) {
     const files = fs.readdirSync(dirPath);
@@ -116,35 +129,27 @@ function addDirectoryToArchive(dirPath, baseDir) {
         if (stats.isDirectory()) {
             addDirectoryToArchive(fullPath, baseDir);
         } else {
-            console.log(`Adding: ${relativePath}`);
-            archive.file(fullPath, { name: relativePath });
+            addFileToArchive(fullPath, relativePath);
         }
     });
 }
 
 // Add files to archive
-filesToInclude.forEach(pattern => {
-    const files = fs.readdirSync(sourceDir);
-    
-    files.forEach(file => {
-        const fullPath = path.join(sourceDir, file);
-        const relativePath = path.relative(sourceDir, fullPath);
-        
-        if (shouldExclude(relativePath)) {
-            return;
-        }
-        
-        if (fs.existsSync(fullPath)) {
-            const stats = fs.statSync(fullPath);
-            
-            if (stats.isDirectory()) {
-                addDirectoryToArchive(fullPath, sourceDir);
-            } else {
-                console.log(`Adding: ${relativePath}`);
-                archive.file(fullPath, { name: relativePath });
-            }
-        }
-    });
+filesToInclude.forEach(includePath => {
+    const fullPath = path.join(sourceDir, includePath);
+    const relativePath = path.relative(sourceDir, fullPath);
+
+    if (!fs.existsSync(fullPath) || shouldExclude(relativePath)) {
+        return;
+    }
+
+    const stats = fs.statSync(fullPath);
+
+    if (stats.isDirectory()) {
+        addDirectoryToArchive(fullPath, sourceDir);
+    } else {
+        addFileToArchive(fullPath, relativePath);
+    }
 });
 
 // Finalize the archive

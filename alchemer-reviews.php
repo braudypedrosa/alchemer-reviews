@@ -2,10 +2,11 @@
 /**
  * Plugin Name: Alchemer Reviews
  * Description: A plugin to import and manage Alchemer survey responses as reviews in WordPress.
- * Version: 1.0.16
+ * Version: 1.0.17
  * Author: Braudy Pedrosa
  * Text Domain: alchemer-reviews
  * Domain Path: /languages
+ * Update URI: https://github.com/braudypedrosa/alchemer-reviews
  */
 
 // If this file is called directly, abort.
@@ -14,9 +15,12 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 // Define plugin constants
-define( 'ALCHEMER_REVIEWS_VERSION', '1.0.16' );
+define( 'ALCHEMER_REVIEWS_VERSION', '1.0.17' );
 define( 'ALCHEMER_REVIEWS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ALCHEMER_REVIEWS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+define( 'ALCHEMER_REVIEWS_PLUGIN_FILE', __FILE__ );
+define( 'ALCHEMER_REVIEWS_GITHUB_REPO', 'braudypedrosa/alchemer-reviews' );
+define( 'ALCHEMER_REVIEWS_GITHUB_ASSET_NAME', 'alchemer-reviews.zip' );
 
 // Include the file that registers the custom post type
 require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-post-types.php';
@@ -29,6 +33,9 @@ require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-api.
 
 // Include the file that handles importing reviews
 require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-importer.php';
+
+// Include the file that handles GitHub release updates
+require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/class-alchemer-reviews-github-updater.php';
 
 // Include dependencies
 require_once ALCHEMER_REVIEWS_PLUGIN_DIR . 'includes/reviews-carousel/alchemer-review-carousel.php';
@@ -56,6 +63,10 @@ function alchemer_reviews_init() {
     // Initialize importer
     $importer = new Alchemer_Reviews_Importer();
     $importer->init();
+
+    // Initialize GitHub release updater
+    $github_updater = new Alchemer_Reviews_GitHub_Updater( ALCHEMER_REVIEWS_PLUGIN_FILE );
+    $github_updater->init();
 
     alchemer_reviews_maybe_schedule_daily_import();
 }

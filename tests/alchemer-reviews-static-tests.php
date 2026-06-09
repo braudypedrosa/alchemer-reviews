@@ -7,10 +7,12 @@ $plugin_dir = dirname(__DIR__);
 
 $files = array(
     'bootstrap' => $plugin_dir . '/alchemer-reviews.php',
+    'build' => $plugin_dir . '/build.js',
     'api' => $plugin_dir . '/includes/class-alchemer-reviews-api.php',
     'importer' => $plugin_dir . '/includes/class-alchemer-reviews-importer.php',
     'post_types' => $plugin_dir . '/includes/class-alchemer-reviews-post-types.php',
     'settings' => $plugin_dir . '/includes/class-alchemer-reviews-settings.php',
+    'updater' => $plugin_dir . '/includes/class-alchemer-reviews-github-updater.php',
     'importer_js' => $plugin_dir . '/assets/js/importer.js',
     'carousel' => $plugin_dir . '/includes/reviews-carousel/alchemer-review-carousel.php',
 );
@@ -60,6 +62,13 @@ $checks = array(
     'admin list exposes review decision' => strpos($source['post_types'], "'review_decision'") !== false,
     'testimonial carousel handles empty reviews' => strpos($source['carousel'], 'empty($reviews)') !== false,
     'API debug logs do not expose signed URLs' => strpos($source['api'], 'Built API URL: ' . '$url') === false && strpos($source['api'], 'Fetching survey responses with URL: ' . '$url') === false,
+    'plugin declares GitHub update URI' => strpos($source['bootstrap'], 'Update URI: https://github.com/braudypedrosa/alchemer-reviews') !== false,
+    'bootstrap includes GitHub updater' => strpos($source['bootstrap'], 'class-alchemer-reviews-github-updater.php') !== false && strpos($source['bootstrap'], 'Alchemer_Reviews_GitHub_Updater') !== false,
+    'GitHub updater hooks WordPress update APIs' => strpos($source['updater'], 'pre_set_site_transient_update_plugins') !== false && strpos($source['updater'], 'plugins_api') !== false && strpos($source['updater'], 'upgrader_process_complete') !== false,
+    'GitHub updater fetches latest release' => strpos($source['updater'], 'api.github.com/repos/braudypedrosa/alchemer-reviews/releases/latest') !== false,
+    'GitHub updater prefers release zip asset' => strpos($source['updater'], 'browser_download_url') !== false && strpos($source['updater'], 'alchemer-reviews.zip') !== false,
+    'GitHub updater compares release tag version' => strpos($source['updater'], 'tag_name') !== false && strpos($source['updater'], 'version_compare') !== false && strpos($source['updater'], 'ALCHEMER_REVIEWS_VERSION') !== false,
+    'release package builder adds each file once' => strpos($source['build'], 'addedFiles') !== false && strpos($source['build'], 'addFileToArchive') !== false && strpos($source['build'], "fs.readdirSync(sourceDir)") === false,
 );
 
 $failed = array();
